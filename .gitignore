@@ -4,3 +4,10 @@ dist/
 *.dmg
 *.zip
 .DS_Store
+
+# Signing credentials
+*.cer
+*.csr
+*.key
+*.p12
+*.pem
