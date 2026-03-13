@@ -75,6 +75,13 @@ html, body, #root {
   border-color: rgba(255, 255, 255, 0.4);
 }
 
+.titlebar-btn--icon {
+  padding: 4px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 /* Embed container */
 .embed-container {
   flex: 1;

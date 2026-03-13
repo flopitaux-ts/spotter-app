@@ -2,13 +2,15 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { init, AuthType, AuthStatus, logout } from '@thoughtspot/visual-embed-sdk';
 import { SpotterEmbed, useEmbedRef } from '@thoughtspot/visual-embed-sdk/react';
 
-const CSS_CUSTOMIZATIONS = {
+const FONT_FAMILY = 'Lexend, "Lexend Fallback", system-ui, -apple-system, sans-serif';
+
+const DARK_CUSTOMIZATIONS = {
   style: {
     customCSS: {
       variables: {
         '--ts-var-root-background': '#0a1628',
         '--ts-var-root-color': '#e2e8f0',
-        '--ts-var-root-font-family': 'Lexend, "Lexend Fallback", system-ui, -apple-system, sans-serif',
+        '--ts-var-root-font-family': FONT_FAMILY,
         '--ts-var-nav-background': '#0d1b30',
         '--ts-var-nav-color': '#e2e8f0',
         '--ts-var-spotter-input-background': '#0d1b30',
@@ -54,22 +56,22 @@ const CSS_CUSTOMIZATIONS = {
         '[class*="chatHistory"]': { 'background-color': '#0d1b30 !important' },
         '[class*="newChat"]': { 'background-color': '#1a2d4a !important', 'border-color': '#1a2d4a !important' },
         '/* b */ div[class]': { 'border-color': 'transparent !important' },
-        '[class*="promptEditor"]': { 'border': '1px solid rgba(255,255,255,0.4) !important', 'border-radius': '16px !important' },
-        '[class*="promptPanel"]': { 'border': '1px solid rgba(255,255,255,0.4) !important', 'border-radius': '16px !important' },
-        '[class*="chatFooter"]': { 'border': '1px solid rgba(255,255,255,0.4) !important', 'border-radius': '16px !important' },
+        '[class*="promptEditor"]': { 'border': '1px solid #ffffff !important', 'border-radius': '16px !important' },
+        '[class*="promptPanel"]': { 'border': '1px solid #ffffff !important', 'border-radius': '16px !important' },
+        '[class*="chatFooter"]': { 'border': '1px solid #ffffff !important', 'border-radius': '16px !important' },
         'textarea, input': { 'color': '#ffffff !important' },
-        'textarea::placeholder, input::placeholder': { 'color': 'rgba(255,255,255,0.6) !important' },
+        'textarea::placeholder, input::placeholder': { 'color': '#ffffff !important' },
         '[class*="inputBox"], [class*="input-with-tokens"]': { 'color': '#ffffff !important' },
-        '[class*="inputBox"]::placeholder, [class*="input-with-tokens"]::placeholder': { 'color': 'rgba(255,255,255,0.6) !important' },
+        '[class*="inputBox"]::placeholder, [class*="input-with-tokens"]::placeholder': { 'color': '#ffffff !important' },
         '[class*="chatInput"], [class*="chatInput"] *': { 'color': '#ffffff !important' },
         '[class*="prompt"] textarea': { 'color': '#ffffff !important' },
-        '[class*="placeholder"], [class*="Placeholder"]': { 'color': 'rgba(255,255,255,0.6) !important' },
+        '[class*="placeholder"], [class*="Placeholder"]': { 'color': '#ffffff !important' },
         '[contenteditable]': { 'color': '#ffffff !important' },
-        '[contenteditable]:empty::before, [contenteditable][data-placeholder]::before': { 'color': 'rgba(255,255,255,0.6) !important' },
-        '[data-placeholder]::before': { 'color': 'rgba(255,255,255,0.6) !important' },
+        '[contenteditable]:empty::before, [contenteditable][data-placeholder]::before': { 'color': '#ffffff !important' },
+        '[data-placeholder]::before': { 'color': '#ffffff !important' },
         '[class*="ProseMirror"], [class*="prosemirror"]': { 'color': '#ffffff !important' },
         '.ProseMirror': { 'color': '#ffffff !important' },
-        '.ProseMirror p.is-editor-empty:first-child::before': { 'color': 'rgba(255,255,255,0.6) !important' },
+        '.ProseMirror p.is-editor-empty:first-child::before': { 'color': '#ffffff !important' },
         '[class*="tiptap"], [class*="Tiptap"]': { 'color': '#ffffff !important' },
         'svg': { 'fill': '#ffffff !important', 'color': '#ffffff !important' },
         'svg path': { 'fill': '#ffffff !important' },
@@ -83,38 +85,75 @@ const CSS_CUSTOMIZATIONS = {
   },
 };
 
-let sdkInitializedForHost = null;
+const LIGHT_CUSTOMIZATIONS = {
+  style: {
+    customCSS: {
+      variables: {
+        '--ts-var-root-font-family': FONT_FAMILY,
+      },
+    },
+  },
+};
 
-function initializeSDK(tsHost, onSuccess, onFailure) {
-  if (sdkInitializedForHost === tsHost) {
+let sdkInitializedKey = null;
+
+function initializeSDK(tsHost, customizations, onSuccess, onFailure) {
+  const key = `${tsHost}:${customizations === DARK_CUSTOMIZATIONS ? 'dark' : 'light'}`;
+  if (sdkInitializedKey === key) {
     onSuccess?.();
     return;
   }
-  sdkInitializedForHost = tsHost;
+  sdkInitializedKey = key;
 
   const authEE = init({
     thoughtSpotHost: tsHost,
-    authType: AuthType.None,
-    customizations: CSS_CUSTOMIZATIONS,
+    authType: AuthType.EmbeddedSSO,
+    customizations,
+    suppressNoCookieAccessAlert: true,
   });
 
   if (authEE) {
     authEE
       .on(AuthStatus.SUCCESS, () => onSuccess?.())
-      .on(AuthStatus.SDK_SUCCESS, () => onSuccess?.())
-      .on(AuthStatus.FAILURE, () => onFailure?.());
+      .on(AuthStatus.SDK_SUCCESS, () => onSuccess?.());
+    // With EmbeddedSSO, FAILURE fires before the popup opens — do not disconnect.
   }
+}
+
+// ---------- Icons ----------
+
+function SunIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="5"/>
+      <line x1="12" y1="1" x2="12" y2="3"/>
+      <line x1="12" y1="21" x2="12" y2="23"/>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+      <line x1="1" y1="12" x2="3" y2="12"/>
+      <line x1="21" y1="12" x2="23" y2="12"/>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+    </svg>
+  );
+}
+
+function MoonIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+    </svg>
+  );
 }
 
 // ---------- Setup page ----------
 
-function SetupPage({ onConnect, savedUrl, loggingIn }) {
+function SetupPage({ onConnect, savedUrl }) {
   const [url, setUrl] = useState(savedUrl || '');
   const [error, setError] = useState('');
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (loggingIn) return;
     let cleaned = url.trim();
     if (!cleaned) { setError('Please enter a URL'); return; }
     if (!cleaned.startsWith('http')) cleaned = 'https://' + cleaned;
@@ -159,17 +198,12 @@ function SetupPage({ onConnect, savedUrl, loggingIn }) {
               onChange={(e) => setUrl(e.target.value)}
               placeholder="e.g. https://mycompany.thoughtspot.cloud"
               autoFocus
-              disabled={loggingIn}
             />
             {error && <p className="setup-error">{error}</p>}
-            <button className="setup-button" type="submit" disabled={loggingIn}>
-              {loggingIn ? 'Signing in...' : 'Connect'}
-            </button>
+            <button className="setup-button" type="submit">Connect</button>
           </form>
           <p className="setup-hint">
-            {loggingIn
-              ? 'Complete sign-in in the popup window'
-              : 'This is the URL you use to access ThoughtSpot in your browser'}
+            This is the URL you use to access ThoughtSpot in your browser
           </p>
         </div>
       </div>
@@ -183,18 +217,32 @@ function SpotterPage({ tsHost, onDisconnect }) {
   const embedRef = useEmbedRef();
   const [sdkReady, setSdkReady] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [theme, setTheme] = useState('light');
+  const [embedKey, setEmbedKey] = useState(0);
+
+  const customizations = theme === 'dark' ? DARK_CUSTOMIZATIONS : LIGHT_CUSTOMIZATIONS;
 
   useEffect(() => {
     initializeSDK(
       tsHost,
+      customizations,
       () => setSdkReady(true),
-      () => setSdkReady(true),
+      () => onDisconnect(),
     );
-    const timer = setTimeout(() => setSdkReady(true), 2000);
-    return () => clearTimeout(timer);
-  }, [tsHost]);
+  }, [tsHost, theme]);
 
   const onSpotterLoad = useCallback(() => setLoaded(true), []);
+
+  const handleToggleTheme = useCallback(() => {
+    setTheme(t => {
+      const next = t === 'dark' ? 'light' : 'dark';
+      sdkInitializedKey = null;
+      setSdkReady(false);
+      setLoaded(false);
+      setEmbedKey(k => k + 1);
+      return next;
+    });
+  }, []);
 
   const handleLogout = useCallback(async () => {
     try { logout(); } catch (_) {}
@@ -204,7 +252,7 @@ function SpotterPage({ tsHost, onDisconnect }) {
     if (window.electronAPI?.logout) {
       await window.electronAPI.logout();
     }
-    sdkInitializedForHost = null;
+    sdkInitializedKey = null;
     onDisconnect();
   }, [onDisconnect]);
 
@@ -231,6 +279,9 @@ function SpotterPage({ tsHost, onDisconnect }) {
       <div className="titlebar">
         <span className="titlebar-title">{hostLabel} - Spotter</span>
         <div className="titlebar-actions">
+          <button className="titlebar-btn titlebar-btn--icon" onClick={handleToggleTheme} title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
+            {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
+          </button>
           <button className="titlebar-btn" onClick={handleLogout}>
             Logout
           </button>
@@ -238,11 +289,16 @@ function SpotterPage({ tsHost, onDisconnect }) {
       </div>
       <div className="embed-container" id="ts-embed">
         <SpotterEmbed
+          key={embedKey}
           ref={embedRef}
           frameParams={{ width: '100%', height: '100%' }}
           worksheetId="auto_mode"
           updatedSpotterChatPrompt={true}
-          enablePastConversationsSidebar={true}
+          spotterSidebarConfig={{
+            enablePastConversationsSidebar: true,
+            spotterSidebarTitle: 'My Conversations',
+            spotterSidebarDefaultExpanded: false,
+          }}
           onLoad={onSpotterLoad}
         />
       </div>
@@ -255,7 +311,6 @@ function SpotterPage({ tsHost, onDisconnect }) {
 export default function App() {
   const [tsHost, setTsHost] = useState(null);
   const [checking, setChecking] = useState(true);
-  const [loggingIn, setLoggingIn] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -268,29 +323,21 @@ export default function App() {
   }, []);
 
   const handleConnect = useCallback(async (url) => {
-    setLoggingIn(true);
-    try {
-      if (window.electronAPI?.openLogin) {
-        await window.electronAPI.openLogin(url);
-      }
-      if (window.electronAPI?.setHostUrl) {
-        await window.electronAPI.setHostUrl(url);
-      }
-      setTsHost(url);
-    } finally {
-      setLoggingIn(false);
+    if (window.electronAPI?.setHostUrl) {
+      await window.electronAPI.setHostUrl(url);
     }
+    setTsHost(url);
   }, []);
 
   const handleDisconnect = useCallback(() => {
-    sdkInitializedForHost = null;
+    sdkInitializedKey = null;
     setTsHost(null);
   }, []);
 
   if (checking) return null;
 
   if (!tsHost) {
-    return <SetupPage onConnect={handleConnect} savedUrl="" loggingIn={loggingIn} />;
+    return <SetupPage onConnect={handleConnect} savedUrl="" />;
   }
 
   return <SpotterPage tsHost={tsHost} onDisconnect={handleDisconnect} />;
