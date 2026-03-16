@@ -7,8 +7,8 @@ exports.default = async function notarizing(context) {
   const appId = 'com.thoughtspot.spotter';
   const appPath = `${appOutDir}/${context.packager.appInfo.productFilename}.app`;
 
-  if (!process.env.APPLE_ID || !process.env.APPLE_APP_SPECIFIC_PASSWORD) {
-    console.log('Skipping notarization: APPLE_ID or APPLE_APP_SPECIFIC_PASSWORD not set');
+  if (!process.env.APPLE_ID || !process.env.APPLE_APP_SPECIFIC_PASSWORD || !process.env.APPLE_TEAM_ID) {
+    console.log('Skipping notarization: APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD or APPLE_TEAM_ID not set');
     return;
   }
 
@@ -18,7 +18,7 @@ exports.default = async function notarizing(context) {
     appPath,
     appleId: process.env.APPLE_ID,
     appleIdPassword: process.env.APPLE_APP_SPECIFIC_PASSWORD,
-    teamId: process.env.APPLE_TEAM_ID || '8LDY3JKFJX',
+    teamId: process.env.APPLE_TEAM_ID,
   });
 
   console.log('Notarization complete.');

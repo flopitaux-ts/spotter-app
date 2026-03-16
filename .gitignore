@@ -5,6 +5,9 @@ dist/
 *.zip
 .DS_Store
 
+# Environment variables
+.env
+
 # Signing credentials
 *.cer
 *.csr

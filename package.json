@@ -21,7 +21,7 @@
         "zip"
       ],
       "icon": "assets/icon.icns",
-      "identity": "FRANCOIS NICOLAS,HENRI LOPITAUX (8LDY3JKFJX)",
+      "identity": null,
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
       "entitlements": "entitlements.mac.plist",
