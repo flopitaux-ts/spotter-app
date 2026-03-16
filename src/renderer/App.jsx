@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { init, AuthType, AuthStatus, logout } from '@thoughtspot/visual-embed-sdk';
 import { SpotterEmbed, useEmbedRef } from '@thoughtspot/visual-embed-sdk/react';
+import tsLogo from './logo.png';
 
 const FONT_FAMILY = 'Lexend, "Lexend Fallback", system-ui, -apple-system, sans-serif';
 
@@ -97,7 +98,7 @@ const LIGHT_CUSTOMIZATIONS = {
 
 let sdkInitializedKey = null;
 
-function initializeSDK(tsHost, customizations, onSuccess, onFailure) {
+function initializeSDK(tsHost, customizations, onSuccess) {
   const key = `${tsHost}:${customizations === DARK_CUSTOMIZATIONS ? 'dark' : 'light'}`;
   if (sdkInitializedKey === key) {
     onSuccess?.();
@@ -105,9 +106,12 @@ function initializeSDK(tsHost, customizations, onSuccess, onFailure) {
   }
   sdkInitializedKey = key;
 
+  // AuthType.None: no session check — fires SUCCESS immediately.
+  // Auth is handled up-front via the LoginPage BrowserWindow flow, so by the time
+  // SpotterPage renders the session cookie is already in Electron's defaultSession.
   const authEE = init({
     thoughtSpotHost: tsHost,
-    authType: AuthType.EmbeddedSSO,
+    authType: AuthType.None,
     customizations,
     suppressNoCookieAccessAlert: true,
   });
@@ -116,7 +120,6 @@ function initializeSDK(tsHost, customizations, onSuccess, onFailure) {
     authEE
       .on(AuthStatus.SUCCESS, () => onSuccess?.())
       .on(AuthStatus.SDK_SUCCESS, () => onSuccess?.());
-    // With EmbeddedSSO, FAILURE fires before the popup opens — do not disconnect.
   }
 }
 
@@ -143,6 +146,14 @@ function MoonIcon() {
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
     </svg>
+  );
+}
+
+// ---------- Shared logo ----------
+
+function SpotterLogo() {
+  return (
+    <img src={tsLogo} alt="ThoughtSpot" style={{ width: 64, height: 64, borderRadius: 16 }} />
   );
 }
 
@@ -175,16 +186,7 @@ function SetupPage({ onConnect, savedUrl }) {
       <div className="setup-page">
         <div className="setup-card">
           <div className="setup-logo">
-            <svg width="48" height="48" viewBox="0 0 32 32" fill="none">
-              <rect width="32" height="32" rx="8" fill="#1a2d4a"/>
-              <rect x="4" y="4" width="24" height="2" rx="1" fill="#fff"/>
-              <rect x="4" y="8" width="24" height="2" rx="1" fill="#fff"/>
-              <rect x="4" y="12" width="24" height="2" rx="1" fill="#fff"/>
-              <rect x="13" y="16" width="2" height="12" rx="1" fill="#fff"/>
-              <rect x="17" y="16" width="2" height="12" rx="1" fill="#fff"/>
-              <rect x="21" y="16" width="2" height="12" rx="1" fill="#fff"/>
-              <circle cx="26" cy="26" r="3" fill="#fff"/>
-            </svg>
+            <SpotterLogo />
           </div>
           <h1 className="setup-title">Connect to ThoughtSpot</h1>
           <p className="setup-subtitle">
@@ -211,9 +213,64 @@ function SetupPage({ onConnect, savedUrl }) {
   );
 }
 
+// ---------- Login page ----------
+
+function LoginPage({ tsHost, onAuthDone, onBack }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const hostLabel = (() => {
+    try { return new URL(tsHost).hostname; } catch { return tsHost; }
+  })();
+
+  const handleSignIn = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const result = await window.electronAPI?.openAuthWindow(tsHost);
+      if (result?.success) {
+        onAuthDone();
+      } else {
+        setError('Sign in was cancelled or timed out. Please try again.');
+      }
+    } catch {
+      setError('Failed to open the sign-in window.');
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="app-container">
+      <div className="titlebar">
+        <span className="titlebar-title">Spotter</span>
+      </div>
+      <div className="setup-page">
+        <div className="setup-card">
+          <div className="setup-logo">
+            <SpotterLogo />
+          </div>
+          <h1 className="setup-title">Sign in to ThoughtSpot</h1>
+          <p className="setup-subtitle">{hostLabel}</p>
+          <button
+            className="setup-button"
+            onClick={handleSignIn}
+            disabled={loading}
+          >
+            {loading ? 'Opening sign-in window…' : 'Sign in'}
+          </button>
+          {error && <p className="setup-error">{error}</p>}
+          <button className="setup-back-btn" onClick={onBack}>
+            ← Wrong URL? Go back
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ---------- Spotter page ----------
 
-function SpotterPage({ tsHost, onDisconnect }) {
+function SpotterPage({ tsHost, onDisconnect, onAuthLost }) {
   const embedRef = useEmbedRef();
   const [sdkReady, setSdkReady] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -223,12 +280,7 @@ function SpotterPage({ tsHost, onDisconnect }) {
   const customizations = theme === 'dark' ? DARK_CUSTOMIZATIONS : LIGHT_CUSTOMIZATIONS;
 
   useEffect(() => {
-    initializeSDK(
-      tsHost,
-      customizations,
-      () => setSdkReady(true),
-      () => onDisconnect(),
-    );
+    initializeSDK(tsHost, customizations, () => setSdkReady(true));
   }, [tsHost, theme]);
 
   const onSpotterLoad = useCallback(() => setLoaded(true), []);
@@ -244,6 +296,18 @@ function SpotterPage({ tsHost, onDisconnect }) {
     });
   }, []);
 
+  const handleSignInAgain = useCallback(async () => {
+    const result = await window.electronAPI?.openAuthWindow(tsHost);
+    if (result?.success) {
+      // Reload the embed to pick up the refreshed session
+      sdkInitializedKey = null;
+      setSdkReady(false);
+      setLoaded(false);
+      setEmbedKey(k => k + 1);
+      initializeSDK(tsHost, customizations, () => setSdkReady(true));
+    }
+  }, [tsHost, customizations]);
+
   const handleLogout = useCallback(async () => {
     try { logout(); } catch (_) {}
     if (window.electronAPI?.clearHostUrl) {
@@ -253,8 +317,9 @@ function SpotterPage({ tsHost, onDisconnect }) {
       await window.electronAPI.logout();
     }
     sdkInitializedKey = null;
+    onAuthLost?.();
     onDisconnect();
-  }, [onDisconnect]);
+  }, [onDisconnect, onAuthLost]);
 
   const hostLabel = (() => {
     try { return new URL(tsHost).hostname.split('.')[0]; } catch { return 'Spotter'; }
@@ -265,6 +330,9 @@ function SpotterPage({ tsHost, onDisconnect }) {
       <div className="app-container">
         <div className="titlebar">
           <span className="titlebar-title">{hostLabel} - Spotter</span>
+          <div className="titlebar-actions">
+            <button className="titlebar-btn" onClick={handleLogout}>Logout</button>
+          </div>
         </div>
         <div className="loading-overlay">
           <div className="spinner" />
@@ -310,6 +378,7 @@ function SpotterPage({ tsHost, onDisconnect }) {
 
 export default function App() {
   const [tsHost, setTsHost] = useState(null);
+  const [authDone, setAuthDone] = useState(false);
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
@@ -317,6 +386,11 @@ export default function App() {
       if (window.electronAPI?.getHostUrl) {
         const saved = await window.electronAPI.getHostUrl();
         if (saved) setTsHost(saved);
+      }
+      // Skip LoginPage if already authenticated from a previous session
+      if (window.electronAPI?.getLoggedIn) {
+        const loggedIn = await window.electronAPI.getLoggedIn();
+        if (loggedIn) setAuthDone(true);
       }
       setChecking(false);
     })();
@@ -329,9 +403,20 @@ export default function App() {
     setTsHost(url);
   }, []);
 
+  const handleAuthDone = useCallback(async () => {
+    await window.electronAPI?.setLoggedIn(true);
+    setAuthDone(true);
+  }, []);
+
+  const handleAuthLost = useCallback(async () => {
+    await window.electronAPI?.setLoggedIn(false);
+    setAuthDone(false);
+  }, []);
+
   const handleDisconnect = useCallback(() => {
     sdkInitializedKey = null;
     setTsHost(null);
+    setAuthDone(false);
   }, []);
 
   if (checking) return null;
@@ -340,5 +425,9 @@ export default function App() {
     return <SetupPage onConnect={handleConnect} savedUrl="" />;
   }
 
-  return <SpotterPage tsHost={tsHost} onDisconnect={handleDisconnect} />;
+  if (!authDone) {
+    return <LoginPage tsHost={tsHost} onAuthDone={handleAuthDone} onBack={handleDisconnect} />;
+  }
+
+  return <SpotterPage tsHost={tsHost} onDisconnect={handleDisconnect} onAuthLost={handleAuthLost} />;
 }

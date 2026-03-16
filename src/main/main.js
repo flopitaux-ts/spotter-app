@@ -43,10 +43,10 @@ function createWindow() {
     },
   });
 
-  // Redirect source map requests to suppress console noise
+  // Cancel source map requests to suppress console noise
   session.defaultSession.webRequest.onBeforeRequest((details, callback) => {
     if (details.url.endsWith('.js.map') || details.url.endsWith('.css.map')) {
-      return callback({ redirectURL: 'data:application/json;charset=utf-8,%7B%22version%22%3A3%2C%22sources%22%3A%5B%5D%2C%22mappings%22%3A%22%22%7D' });
+      return callback({ cancel: true });
     }
     callback({});
   });
@@ -65,12 +65,16 @@ function createWindow() {
 
   mainWindow.loadFile(path.join(__dirname, '../../build/index.html'));
 
-  // Prevent the SSO callback from navigating the main window away from the app
-  mainWindow.webContents.on('will-navigate', (event, url) => {
-    if (!url.startsWith('file://')) {
+  // Keep the main window on the local file:// page at all times.
+  // isMainFrame check is critical: will-navigate/will-redirect fire for ALL frames including
+  // iframes — without this, the SpotterEmbed iframe's OIDC redirect to Okta gets blocked.
+  const blockExternalNavigation = (event, url, isInPlace, isMainFrame) => {
+    if (isMainFrame && !url.startsWith('file://')) {
       event.preventDefault();
     }
-  });
+  };
+  mainWindow.webContents.on('will-navigate', blockExternalNavigation);
+  mainWindow.webContents.on('will-redirect', blockExternalNavigation);
 
   if (process.argv.includes('--devtools')) {
     mainWindow.webContents.openDevTools();
@@ -96,6 +100,7 @@ ipcMain.handle('set-host-url', (_event, url) => {
 ipcMain.handle('clear-host-url', () => {
   const config = readConfig();
   delete config.hostUrl;
+  delete config.authToken;
   writeConfig(config);
   return true;
 });
@@ -104,9 +109,78 @@ ipcMain.handle('logout', async () => {
   await session.defaultSession.clearStorageData();
   await session.defaultSession.clearCache();
   await session.defaultSession.clearAuthCache();
+  const config = readConfig();
+  delete config.authToken;
+  delete config.loggedIn;
+  writeConfig(config);
   if (mainWindow) {
     mainWindow.loadFile(path.join(__dirname, '../../build/index.html'));
   }
+});
+
+ipcMain.handle('get-logged-in', () => {
+  return readConfig().loggedIn || false;
+});
+
+ipcMain.handle('set-logged-in', (_event, value) => {
+  const config = readConfig();
+  config.loggedIn = !!value;
+  writeConfig(config);
+  return true;
+});
+
+// Open a dedicated BrowserWindow for OIDC login.
+// Uses defaultSession so the resulting auth cookies are shared with the main window's embed.
+// Injects a window.uploadMixpanelEvent stub on dom-ready to work around a ThoughtSpot
+// staging bug where their /authorize page calls this function from a script that fails to
+// load from CDNjs (the referenced axios version does not exist on that CDN).
+ipcMain.handle('open-auth-window', async (_event, tsHost) => {
+  return new Promise((resolve) => {
+    let resolved = false;
+    const finish = (result) => {
+      if (!resolved) {
+        resolved = true;
+        if (authWin && !authWin.isDestroyed()) authWin.close();
+        resolve(result);
+      }
+    };
+
+    const authWin = new BrowserWindow({
+      width: 520,
+      height: 680,
+      title: 'Sign in to ThoughtSpot',
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        // defaultSession used by default — cookies shared with the main window
+      },
+    });
+
+    authWin.loadURL(`${tsHost}/callosum/v1/oidc/login`);
+
+    // Inject the stub on every dom-ready (fires on each page in the auth flow).
+    // This must run before the XHR success callback that calls uploadMixpanelEvent.
+    authWin.webContents.on('dom-ready', () => {
+      authWin.webContents.executeJavaScript(
+        'if (typeof window.uploadMixpanelEvent === "undefined") { window.uploadMixpanelEvent = function() {}; }'
+      ).catch(() => {});
+    });
+
+    // Detect auth completion: ThoughtSpot redirects back to its main app after OIDC
+    authWin.webContents.on('did-navigate', (_e, url) => {
+      if (
+        url.startsWith(tsHost) &&
+        !url.includes('/authorize') &&
+        !url.includes('/callosum/v1/oidc') &&
+        !url.includes('/callosum/v1/saml')
+      ) {
+        finish({ success: true });
+      }
+    });
+
+    authWin.on('closed', () => finish({ success: false }));
+    setTimeout(() => finish({ success: false }), 10 * 60 * 1000);
+  });
 });
 
 app.whenReady().then(createWindow);
