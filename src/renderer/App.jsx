@@ -365,7 +365,7 @@ function SpotterPage({ tsHost, onDisconnect, onAuthLost }) {
           spotterSidebarConfig={{
             enablePastConversationsSidebar: true,
             spotterSidebarTitle: 'My Conversations',
-            spotterSidebarDefaultExpanded: false,
+            spotterSidebarDefaultExpanded: true,
           }}
           onLoad={onSpotterLoad}
         />
