@@ -21,7 +21,7 @@
         "zip"
       ],
       "icon": "assets/icon.icns",
-      "identity": "Developer ID Application: FRANCOIS NICOLAS,HENRI LOPITAUX (8LDY3JKFJX)",
+      "identity": "FRANCOIS NICOLAS,HENRI LOPITAUX (8LDY3JKFJX)",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
       "entitlements": "entitlements.mac.plist",
