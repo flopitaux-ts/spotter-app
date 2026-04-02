@@ -1,6 +1,8 @@
-# Spotter — Standalone Mac App
+# spotter-desktop
 
-A standalone Electron + React application that embeds [ThoughtSpot Spotter](https://champagne.thoughtspotstaging.cloud/#/).
+> **GitHub:** [thoughtspot/spotter-desktop](https://github.com/thoughtspot/spotter-desktop)
+
+A standalone Electron + React application that embeds [ThoughtSpot Spotter](https://champagne.thoughtspotstaging.cloud/#/) as a native macOS desktop app.
 
 ## Getting Started
 
