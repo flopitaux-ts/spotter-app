@@ -1,17 +1,41 @@
-# spotter-desktop
+# Spotter Desktop
 
 > **GitHub:** [thoughtspot/spotter-desktop](https://github.com/thoughtspot/spotter-desktop)
 
-A standalone Electron + React application that embeds [ThoughtSpot Spotter](https://champagne.thoughtspotstaging.cloud/#/) as a native macOS desktop app.
+A native macOS desktop app that brings [ThoughtSpot Spotter](https://www.thoughtspot.com/spotter) to your dock — no browser tab required.
 
-## Getting Started
+Built with Electron + React, it wraps the ThoughtSpot Visual Embed SDK to deliver a first-class desktop experience with persistent sessions, dark/light theme support, and a collapsible conversation sidebar.
+
+## Features
+
+- Connect to any ThoughtSpot cloud instance
+- Full SSO / browser-based sign-in flow
+- Dark and light theme toggle
+- Persistent session across launches
+- Collapsible conversation history sidebar
+- Signed & notarization-ready macOS build
+
+## Installation
+
+The easiest way to get started is to download the latest release directly — no Node.js or build tools needed.
+
+1. Go to the [Releases](https://github.com/thoughtspot/spotter-desktop/releases) page
+2. Download the latest `Spotter-<version>.dmg`
+3. Open the `.dmg`, drag **Spotter** to your Applications folder
+4. Launch Spotter from Applications or Spotlight
+
+> **First launch on macOS:** If you see a security warning, go to **System Settings → Privacy & Security** and click **Open Anyway**.
+
+---
+
+## Getting Started (Development)
 
 ### Prerequisites
 
 - Node.js 18+
-- npm or yarn
+- npm
 
-### Install Dependencies
+### Install
 
 ```bash
 npm install
@@ -23,7 +47,7 @@ npm install
 npm start
 ```
 
-To open DevTools, pass the flag:
+To open DevTools:
 
 ```bash
 npm start -- --devtools
@@ -35,7 +59,7 @@ npm start -- --devtools
 npm run pack
 ```
 
-The `.dmg` and `.zip` outputs will be in the `dist/` folder.
+Outputs a signed `.dmg` and `.zip` in the `dist/` folder.
 
 ## Project Structure
 
@@ -45,8 +69,18 @@ src/
 │   ├── main.js        # Electron main process
 │   └── preload.js     # Preload script (context bridge)
 └── renderer/
-    ├── index.html      # HTML shell
-    ├── index.jsx       # React entry point
-    ├── App.jsx         # Main component with webview
-    └── styles.css      # Styles
+    ├── index.html     # HTML shell
+    ├── index.jsx      # React entry point
+    ├── App.jsx        # Main app component (setup, login, Spotter embed)
+    └── styles.css     # Styles
 ```
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Shell | Electron 29 |
+| UI | React 18 |
+| Embed | ThoughtSpot Visual Embed SDK 1.46.5 |
+| Bundler | Webpack 5 |
+| Packaging | electron-builder |

@@ -49,7 +49,8 @@ const DARK_CUSTOMIZATIONS = {
         'body, body *': { 'color': '#e2e8f0 !important' },
         'h1, h2, h3, h4, h5, h6, p, span, label, a, div': { 'color': '#e2e8f0 !important' },
         'div[class]': { 'background-color': 'transparent !important', 'background-image': 'none !important' },
-        'body': { 'background-color': '#0a1628 !important' },
+        'html': { 'overflow-x': 'clip !important', 'width': '100% !important' },
+        'body': { 'background-color': '#0a1628 !important', 'width': '100% !important', 'max-width': '100% !important', 'overflow-x': 'clip !important', 'box-sizing': 'border-box !important' },
         '[class*="sidebar"]': { 'background-color': '#0d1b30 !important', 'border-color': '#1a2d4a !important' },
         '[class*="pastConversation"]': { 'background-color': '#0d1b30 !important' },
         '[class*="conversationList"]': { 'background-color': '#0d1b30 !important' },
@@ -60,6 +61,7 @@ const DARK_CUSTOMIZATIONS = {
         '[class*="promptEditor"]': { 'border': '1px solid #ffffff !important', 'border-radius': '16px !important' },
         '[class*="promptPanel"]': { 'border': '1px solid #ffffff !important', 'border-radius': '16px !important' },
         '[class*="chatFooter"]': { 'border': '1px solid #ffffff !important', 'border-radius': '16px !important' },
+        '[class*="chatMessages"], [class*="chatBody"], [class*="conversationThread"], [class*="messageList"], [class*="chatContent"], [class*="messageContainer"], [class*="conversationContainer"]': { 'overflow-y': 'auto !important', 'width': '100% !important', 'max-width': '100% !important', 'box-sizing': 'border-box !important' },
         'textarea, input': { 'color': '#ffffff !important' },
         'textarea::placeholder, input::placeholder': { 'color': '#ffffff !important' },
         '[class*="inputBox"], [class*="input-with-tokens"]': { 'color': '#ffffff !important' },
@@ -91,6 +93,11 @@ const LIGHT_CUSTOMIZATIONS = {
     customCSS: {
       variables: {
         '--ts-var-root-font-family': FONT_FAMILY,
+      },
+      rules_UNSTABLE: {
+        'html': { 'overflow-x': 'clip !important', 'width': '100% !important' },
+        'body': { 'width': '100% !important', 'max-width': '100% !important', 'overflow-x': 'clip !important', 'box-sizing': 'border-box !important' },
+        '[class*="chatMessages"], [class*="chatBody"], [class*="conversationThread"], [class*="messageList"], [class*="chatContent"], [class*="messageContainer"], [class*="conversationContainer"]': { 'overflow-y': 'auto !important', 'width': '100% !important', 'max-width': '100% !important', 'box-sizing': 'border-box !important' },
       },
     },
   },
