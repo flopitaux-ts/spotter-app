@@ -26,8 +26,11 @@ function isValidHttpsUrl(str) {
 }
 
 let mainWindow = null;
+let currentTsHost = null;
 
 function createWindow() {
+  currentTsHost = readConfig().hostUrl || null;
+
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -35,7 +38,7 @@ function createWindow() {
     minHeight: 600,
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 16, y: 16 },
-    backgroundColor: '#0a1628',
+    backgroundColor: '#ffffff',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -51,8 +54,13 @@ function createWindow() {
     callback({});
   });
 
-  // Strip framing and CSP restrictions so the embed iframe works
+  // Strip framing and CSP restrictions so the embed iframe works.
+  // Only applied to responses from the configured ThoughtSpot host to avoid
+  // weakening security headers on third-party requests (e.g. OIDC providers).
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    if (!currentTsHost || !details.url.startsWith(currentTsHost)) {
+      return callback({});
+    }
     const headers = { ...details.responseHeaders };
     delete headers['x-frame-options'];
     delete headers['X-Frame-Options'];
@@ -94,6 +102,7 @@ ipcMain.handle('set-host-url', (_event, url) => {
   const config = readConfig();
   config.hostUrl = new URL(url).origin;
   writeConfig(config);
+  currentTsHost = config.hostUrl;
   return true;
 });
 
@@ -102,6 +111,7 @@ ipcMain.handle('clear-host-url', () => {
   delete config.hostUrl;
   delete config.authToken;
   writeConfig(config);
+  currentTsHost = null;
   return true;
 });
 
@@ -134,7 +144,10 @@ ipcMain.handle('set-logged-in', (_event, value) => {
 // Injects a window.uploadMixpanelEvent stub on dom-ready to work around a ThoughtSpot
 // staging bug where their /authorize page calls this function from a script that fails to
 // load from CDNjs (the referenced axios version does not exist on that CDN).
-ipcMain.handle('open-auth-window', async (_event, tsHost) => {
+// tsHost is read from the persisted config rather than trusted from the renderer.
+ipcMain.handle('open-auth-window', async () => {
+  const tsHost = readConfig().hostUrl;
+  if (!tsHost) return { success: false };
   return new Promise((resolve) => {
     let resolved = false;
     const finish = (result) => {

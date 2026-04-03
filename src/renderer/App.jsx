@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { init, AuthType, AuthStatus, logout } from '@thoughtspot/visual-embed-sdk';
 import { SpotterEmbed, useEmbedRef } from '@thoughtspot/visual-embed-sdk/react';
 import tsLogo from './logo.png';
@@ -44,11 +44,12 @@ const DARK_CUSTOMIZATIONS = {
         '--ts-var-list-hover-background': '#1a2d4a',
         '--ts-var-list-selected-background': '#1a2d4a',
         '--ts-var-segment-control-hover-background': '#1a2d4a',
+        '--ts-var-spotter-chat-width': '100%',
       },
       rules_UNSTABLE: {
         'body, body *': { 'color': '#e2e8f0 !important' },
         'h1, h2, h3, h4, h5, h6, p, span, label, a, div': { 'color': '#e2e8f0 !important' },
-        'div[class]': { 'background-color': 'transparent !important', 'background-image': 'none !important' },
+        'div[class]': { 'background-color': 'transparent !important', 'background-image': 'none !important', 'border-color': 'transparent !important' },
         'html': { 'overflow-x': 'clip !important', 'width': '100% !important' },
         'body': { 'background-color': '#0a1628 !important', 'width': '100% !important', 'max-width': '100% !important', 'overflow-x': 'clip !important', 'box-sizing': 'border-box !important' },
         '[class*="sidebar"]': { 'background-color': '#0d1b30 !important', 'border-color': '#1a2d4a !important' },
@@ -57,7 +58,6 @@ const DARK_CUSTOMIZATIONS = {
         '[class*="sidePanel"]': { 'background-color': '#0d1b30 !important' },
         '[class*="chatHistory"]': { 'background-color': '#0d1b30 !important' },
         '[class*="newChat"]': { 'background-color': '#1a2d4a !important', 'border-color': '#1a2d4a !important' },
-        '/* b */ div[class]': { 'border-color': 'transparent !important' },
         '[class*="promptEditor"]': { 'border': '1px solid #ffffff !important', 'border-radius': '16px !important' },
         '[class*="promptPanel"]': { 'border': '1px solid #ffffff !important', 'border-radius': '16px !important' },
         '[class*="chatFooter"]': { 'border': '1px solid #ffffff !important', 'border-radius': '16px !important' },
@@ -93,6 +93,7 @@ const LIGHT_CUSTOMIZATIONS = {
     customCSS: {
       variables: {
         '--ts-var-root-font-family': FONT_FAMILY,
+        '--ts-var-spotter-chat-width': '100%',
       },
       rules_UNSTABLE: {
         'html': { 'overflow-x': 'clip !important', 'width': '100% !important' },
@@ -103,19 +104,14 @@ const LIGHT_CUSTOMIZATIONS = {
   },
 };
 
-let sdkInitializedKey = null;
+// Shared utility: extract a short friendly label from a ThoughtSpot host URL
+function getHostLabel(tsHost) {
+  try { return new URL(tsHost).hostname.split('.')[0]; } catch { return 'Spotter'; }
+}
 
-function initializeSDK(tsHost, customizations, onSuccess) {
-  const key = `${tsHost}:${customizations === DARK_CUSTOMIZATIONS ? 'dark' : 'light'}`;
-  if (sdkInitializedKey === key) {
-    onSuccess?.();
-    return;
-  }
-  sdkInitializedKey = key;
+// ---------- SDK init ----------
 
-  // AuthType.None: no session check — fires SUCCESS immediately.
-  // Auth is handled up-front via the LoginPage BrowserWindow flow, so by the time
-  // SpotterPage renders the session cookie is already in Electron's defaultSession.
+function initializeSDK(tsHost, customizations, onSuccess, onAuthFailed) {
   const authEE = init({
     thoughtSpotHost: tsHost,
     authType: AuthType.None,
@@ -126,7 +122,31 @@ function initializeSDK(tsHost, customizations, onSuccess) {
   if (authEE) {
     authEE
       .on(AuthStatus.SUCCESS, () => onSuccess?.())
-      .on(AuthStatus.SDK_SUCCESS, () => onSuccess?.());
+      .on(AuthStatus.SDK_SUCCESS, () => onSuccess?.())
+      .on(AuthStatus.FAILURE, () => onAuthFailed?.());
+  }
+}
+
+// ---------- Error Boundary ----------
+
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() { return { hasError: true }; }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="loading-overlay">
+          <p className="loading-text">Something went wrong loading Spotter.</p>
+          <button className="setup-button" onClick={() => window.location.reload()}>
+            Reload
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
   }
 }
 
@@ -234,7 +254,7 @@ function LoginPage({ tsHost, onAuthDone, onBack }) {
     setLoading(true);
     setError('');
     try {
-      const result = await window.electronAPI?.openAuthWindow(tsHost);
+      const result = await window.electronAPI?.openAuthWindow();
       if (result?.success) {
         onAuthDone();
       } else {
@@ -280,57 +300,42 @@ function LoginPage({ tsHost, onAuthDone, onBack }) {
 function SpotterPage({ tsHost, onDisconnect, onAuthLost }) {
   const embedRef = useEmbedRef();
   const [sdkReady, setSdkReady] = useState(false);
-  const [loaded, setLoaded] = useState(false);
   const [theme, setTheme] = useState('light');
   const [embedKey, setEmbedKey] = useState(0);
+  const sdkKeyRef = useRef(null);
 
   const customizations = theme === 'dark' ? DARK_CUSTOMIZATIONS : LIGHT_CUSTOMIZATIONS;
 
   useEffect(() => {
-    initializeSDK(tsHost, customizations, () => setSdkReady(true));
+    const key = `${tsHost}:${theme}`;
+    if (sdkKeyRef.current === key) return; // already initialized for this config
+    sdkKeyRef.current = key;
+    initializeSDK(tsHost, customizations, () => setSdkReady(true), onAuthLost);
   }, [tsHost, theme]);
 
-  const onSpotterLoad = useCallback(() => setLoaded(true), []);
-
   const handleToggleTheme = useCallback(() => {
-    setTheme(t => {
-      const next = t === 'dark' ? 'light' : 'dark';
-      sdkInitializedKey = null;
-      setSdkReady(false);
-      setLoaded(false);
-      setEmbedKey(k => k + 1);
-      return next;
-    });
+    setTheme(t => t === 'dark' ? 'light' : 'dark');
+    setSdkReady(false);
+    setEmbedKey(k => k + 1);
   }, []);
 
   const handleSignInAgain = useCallback(async () => {
-    const result = await window.electronAPI?.openAuthWindow(tsHost);
+    const result = await window.electronAPI?.openAuthWindow();
     if (result?.success) {
-      // Reload the embed to pick up the refreshed session
-      sdkInitializedKey = null;
+      const key = `${tsHost}:${theme}`;
+      sdkKeyRef.current = key; // keep key in sync to prevent duplicate init from effect
       setSdkReady(false);
-      setLoaded(false);
       setEmbedKey(k => k + 1);
-      initializeSDK(tsHost, customizations, () => setSdkReady(true));
+      initializeSDK(tsHost, customizations, () => setSdkReady(true), onAuthLost);
     }
-  }, [tsHost, customizations]);
+  }, [tsHost, theme, customizations, onAuthLost]);
 
   const handleLogout = useCallback(async () => {
-    try { logout(); } catch (_) {}
-    if (window.electronAPI?.clearHostUrl) {
-      await window.electronAPI.clearHostUrl();
-    }
-    if (window.electronAPI?.logout) {
-      await window.electronAPI.logout();
-    }
-    sdkInitializedKey = null;
-    onAuthLost?.();
-    onDisconnect();
-  }, [onDisconnect, onAuthLost]);
+    try { logout(); } catch (e) { console.error('SDK logout error:', e); }
+    await window.electronAPI?.logout();
+  }, []);
 
-  const hostLabel = (() => {
-    try { return new URL(tsHost).hostname.split('.')[0]; } catch { return 'Spotter'; }
-  })();
+  const hostLabel = getHostLabel(tsHost);
 
   if (!sdkReady) {
     return (
@@ -363,19 +368,19 @@ function SpotterPage({ tsHost, onDisconnect, onAuthLost }) {
         </div>
       </div>
       <div className="embed-container" id="ts-embed">
-        <SpotterEmbed
-          key={embedKey}
-          ref={embedRef}
-          frameParams={{ width: '100%', height: '100%' }}
-          worksheetId="auto_mode"
-          updatedSpotterChatPrompt={true}
-          spotterSidebarConfig={{
-            enablePastConversationsSidebar: true,
-            spotterSidebarTitle: 'My Conversations',
-            spotterSidebarDefaultExpanded: false,
-          }}
-          onLoad={onSpotterLoad}
-        />
+        <ErrorBoundary>
+          <SpotterEmbed
+            key={embedKey}
+            ref={embedRef}
+            frameParams={{ width: '100%', height: '100%' }}
+            worksheetId="auto_mode"
+            spotterSidebarConfig={{
+              enablePastConversationsSidebar: true,
+              spotterSidebarTitle: 'My Conversations',
+              spotterSidebarDefaultExpanded: false,
+            }}
+          />
+        </ErrorBoundary>
       </div>
     </div>
   );
@@ -420,13 +425,20 @@ export default function App() {
     setAuthDone(false);
   }, []);
 
-  const handleDisconnect = useCallback(() => {
-    sdkInitializedKey = null;
+  const handleDisconnect = useCallback(async () => {
+    await window.electronAPI?.clearHostUrl();
     setTsHost(null);
     setAuthDone(false);
   }, []);
 
-  if (checking) return null;
+  if (checking) {
+    return (
+      <div className="app-container">
+        <div className="titlebar"><span className="titlebar-title">Spotter</span></div>
+        <div className="loading-overlay"><div className="spinner" /></div>
+      </div>
+    );
+  }
 
   if (!tsHost) {
     return <SetupPage onConnect={handleConnect} savedUrl="" />;

@@ -6,7 +6,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getHostUrl: () => ipcRenderer.invoke('get-host-url'),
   setHostUrl: (url) => ipcRenderer.invoke('set-host-url', url),
   clearHostUrl: () => ipcRenderer.invoke('clear-host-url'),
-  openAuthWindow: (tsHost) => ipcRenderer.invoke('open-auth-window', tsHost),
+  openAuthWindow: () => ipcRenderer.invoke('open-auth-window'),
   getLoggedIn: () => ipcRenderer.invoke('get-logged-in'),
   setLoggedIn: (v) => ipcRenderer.invoke('set-logged-in', v),
 });

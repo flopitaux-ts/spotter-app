@@ -44,7 +44,8 @@ npm install
 ### Run in Development
 
 ```bash
-npm start
+npm start        # one-shot build then launch
+npm run dev      # watch mode — rebuilds on file changes (use during active development)
 ```
 
 To open DevTools:
@@ -60,6 +61,19 @@ npm run pack
 ```
 
 Outputs a signed `.dmg` and `.zip` in the `dist/` folder.
+
+### Code Signing & Notarization
+
+To produce a notarized build, set the following environment variables before running `npm run pack`:
+
+```bash
+export APPLE_ID="your@apple.id"
+export APPLE_APP_SPECIFIC_PASSWORD="xxxx-xxxx-xxxx-xxxx"
+export APPLE_TEAM_ID="XXXXXXXXXX"
+npm run pack
+```
+
+Without these variables, the app is built and signed but not notarized (Gatekeeper will show a warning on first launch).
 
 ## Project Structure
 
@@ -84,3 +98,14 @@ src/
 | Embed | ThoughtSpot Visual Embed SDK 1.46.5 |
 | Bundler | Webpack 5 |
 | Packaging | electron-builder |
+
+## Troubleshooting
+
+**Reset the app (clear saved host and session):**
+
+Delete the config file and relaunch:
+```
+~/Library/Application Support/Spotter/spotter-config.json
+```
+
+This resets the ThoughtSpot host URL and login state, returning you to the setup screen.
