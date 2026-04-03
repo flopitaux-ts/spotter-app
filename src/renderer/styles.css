@@ -244,3 +244,58 @@ html, body, #root {
 .setup-back-btn:hover {
   color: rgba(226, 232, 240, 0.8);
 }
+
+/* Update notification banner */
+.update-banner {
+  -webkit-app-region: no-drag;
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: #1a2d4a;
+  border: 1px solid #3b82f6;
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  font-size: 13px;
+  color: #e2e8f0;
+  max-width: 340px;
+}
+
+.update-banner-btn {
+  -webkit-app-region: no-drag;
+  padding: 5px 12px;
+  background: #2563eb;
+  border: none;
+  border-radius: 6px;
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.2s;
+}
+
+.update-banner-btn:hover {
+  background: #1d4ed8;
+}
+
+.update-banner-dismiss {
+  -webkit-app-region: no-drag;
+  background: none;
+  border: none;
+  color: rgba(226, 232, 240, 0.5);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+  transition: color 0.2s;
+}
+
+.update-banner-dismiss:hover {
+  color: #e2e8f0;
+}

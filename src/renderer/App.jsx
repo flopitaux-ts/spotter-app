@@ -57,8 +57,8 @@ const DARK_CUSTOMIZATIONS = {
         '[class*="sidebar"], [class*="pastConversation"], [class*="conversationList"], [class*="sidePanel"], [class*="chatHistory"]': { 'background-color': '#0d1b30 !important' },
         '[class*="sidebar"]': { 'border-color': '#1a2d4a !important' },
         '[class*="newChat"]': { 'background-color': '#1a2d4a !important', 'border-color': '#1a2d4a !important' },
-        // Chat input border
-        '[class*="promptEditor"], [class*="promptPanel"], [class*="chatFooter"]': { 'border': '1px solid #ffffff !important', 'border-radius': '16px !important' },
+        // Chat input border — use div prefix to beat div[class] border-color:transparent (specificity 0-1-1)
+        'div[class*="promptEditor"], div[class*="promptPanel"], div[class*="chatFooter"]': { 'border': '1px solid #ffffff !important', 'border-radius': '16px !important' },
         // Chat message containers — layout + word wrap
         '[class*="chatMessages"], [class*="chatBody"], [class*="conversationThread"], [class*="messageList"], [class*="chatContent"], [class*="messageContainer"], [class*="conversationContainer"]': { 'overflow-y': 'auto !important', 'width': '100% !important', 'max-width': '100% !important', 'box-sizing': 'border-box !important', 'word-break': 'break-word !important', 'overflow-wrap': 'break-word !important', 'white-space': 'normal !important' },
         // Input & rich text editor text (white for better contrast in inputs)
@@ -92,6 +92,31 @@ const LIGHT_CUSTOMIZATIONS = {
 // Shared utility: extract a short friendly label from a ThoughtSpot host URL
 function getHostLabel(tsHost) {
   try { return new URL(tsHost).hostname.split('.')[0]; } catch { return 'Spotter'; }
+}
+
+// Simple semver comparison — returns true if latest > current
+function isNewerVersion(latest, current) {
+  const parse = (v) => v.replace(/^v/, '').split('.').map(Number);
+  const [l, c] = [parse(latest), parse(current)];
+  for (let i = 0; i < 3; i++) {
+    if ((l[i] || 0) > (c[i] || 0)) return true;
+    if ((l[i] || 0) < (c[i] || 0)) return false;
+  }
+  return false;
+}
+
+// ---------- Update banner ----------
+
+function UpdateBanner({ version, url, onDismiss }) {
+  return (
+    <div className="update-banner">
+      <span>✨ Version {version} is available</span>
+      <button className="update-banner-btn" onClick={() => window.electronAPI?.openExternal(url)}>
+        Download
+      </button>
+      <button className="update-banner-dismiss" onClick={onDismiss}>✕</button>
+    </div>
+  );
 }
 
 // ---------- SDK init ----------
@@ -378,6 +403,7 @@ export default function App() {
   const [tsHost, setTsHost] = useState(null);
   const [authDone, setAuthDone] = useState(false);
   const [checking, setChecking] = useState(true);
+  const [updateInfo, setUpdateInfo] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -391,6 +417,20 @@ export default function App() {
         if (loggedIn) setAuthDone(true);
       }
       setChecking(false);
+    })();
+  }, []);
+
+  // Check for updates once on startup
+  useEffect(() => {
+    (async () => {
+      try {
+        const info = await window.electronAPI?.checkForUpdates();
+        if (info && isNewerVersion(info.latestVersion, info.currentVersion)) {
+          setUpdateInfo(info);
+        }
+      } catch {
+        // Silently ignore update check failures
+      }
     })();
   }, []);
 
@@ -417,9 +457,18 @@ export default function App() {
     setAuthDone(false);
   }, []);
 
+  const updateBanner = updateInfo ? (
+    <UpdateBanner
+      version={updateInfo.latestVersion}
+      url={updateInfo.url}
+      onDismiss={() => setUpdateInfo(null)}
+    />
+  ) : null;
+
   if (checking) {
     return (
       <div className="app-container">
+        {updateBanner}
         <div className="titlebar"><span className="titlebar-title">Spotter</span></div>
         <div className="loading-overlay"><div className="spinner" /></div>
       </div>
@@ -427,12 +476,27 @@ export default function App() {
   }
 
   if (!tsHost) {
-    return <SetupPage onConnect={handleConnect} savedUrl="" />;
+    return (
+      <>
+        {updateBanner}
+        <SetupPage onConnect={handleConnect} savedUrl="" />
+      </>
+    );
   }
 
   if (!authDone) {
-    return <LoginPage tsHost={tsHost} onAuthDone={handleAuthDone} onBack={handleDisconnect} />;
+    return (
+      <>
+        {updateBanner}
+        <LoginPage tsHost={tsHost} onAuthDone={handleAuthDone} onBack={handleDisconnect} />
+      </>
+    );
   }
 
-  return <SpotterPage tsHost={tsHost} onDisconnect={handleDisconnect} onAuthLost={handleAuthLost} />;
+  return (
+    <>
+      {updateBanner}
+      <SpotterPage tsHost={tsHost} onDisconnect={handleDisconnect} onAuthLost={handleAuthLost} />
+    </>
+  );
 }

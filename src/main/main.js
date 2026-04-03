@@ -1,6 +1,7 @@
-const { app, BrowserWindow, session, ipcMain } = require('electron');
+const { app, BrowserWindow, session, ipcMain, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const https = require('https');
 
 const configPath = path.join(app.getPath('userData'), 'spotter-config.json');
 
@@ -194,6 +195,38 @@ ipcMain.handle('open-auth-window', async () => {
     authWin.on('closed', () => finish({ success: false }));
     setTimeout(() => finish({ success: false }), 10 * 60 * 1000);
   });
+});
+
+ipcMain.handle('check-for-updates', () => {
+  const currentVersion = app.getVersion();
+  return new Promise((resolve) => {
+    const req = https.get(
+      {
+        hostname: 'api.github.com',
+        path: '/repos/thoughtspot/spotter-desktop/releases/latest',
+        headers: { 'User-Agent': 'spotter-desktop' },
+      },
+      (res) => {
+        let data = '';
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => {
+          try {
+            const release = JSON.parse(data);
+            resolve({ latestVersion: release.tag_name, currentVersion, url: release.html_url });
+          } catch {
+            resolve(null);
+          }
+        });
+      }
+    );
+    req.on('error', () => resolve(null));
+  });
+});
+
+ipcMain.handle('open-external', (_event, url) => {
+  if (typeof url === 'string' && url.startsWith('https://github.com/thoughtspot/spotter-desktop')) {
+    shell.openExternal(url);
+  }
 });
 
 app.whenReady().then(createWindow);
