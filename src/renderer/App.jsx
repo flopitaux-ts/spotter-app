@@ -61,7 +61,7 @@ const DARK_CUSTOMIZATIONS = {
         '[class*="promptEditor"]': { 'border': '1px solid #ffffff !important', 'border-radius': '16px !important' },
         '[class*="promptPanel"]': { 'border': '1px solid #ffffff !important', 'border-radius': '16px !important' },
         '[class*="chatFooter"]': { 'border': '1px solid #ffffff !important', 'border-radius': '16px !important' },
-        '[class*="chatMessages"], [class*="chatBody"], [class*="conversationThread"], [class*="messageList"], [class*="chatContent"], [class*="messageContainer"], [class*="conversationContainer"]': { 'overflow-y': 'auto !important', 'width': '100% !important', 'max-width': '100% !important', 'box-sizing': 'border-box !important' },
+        '[class*="chatMessages"], [class*="chatBody"], [class*="conversationThread"], [class*="messageList"], [class*="chatContent"], [class*="messageContainer"], [class*="conversationContainer"]': { 'overflow-y': 'auto !important', 'width': '100% !important', 'max-width': '100% !important', 'box-sizing': 'border-box !important', 'word-break': 'break-word !important', 'overflow-wrap': 'break-word !important', 'white-space': 'normal !important' },
         'textarea, input': { 'color': '#ffffff !important' },
         'textarea::placeholder, input::placeholder': { 'color': '#ffffff !important' },
         '[class*="inputBox"], [class*="input-with-tokens"]': { 'color': '#ffffff !important' },
@@ -98,7 +98,7 @@ const LIGHT_CUSTOMIZATIONS = {
       rules_UNSTABLE: {
         'html': { 'overflow-x': 'clip !important', 'width': '100% !important' },
         'body': { 'width': '100% !important', 'max-width': '100% !important', 'overflow-x': 'clip !important', 'box-sizing': 'border-box !important' },
-        '[class*="chatMessages"], [class*="chatBody"], [class*="conversationThread"], [class*="messageList"], [class*="chatContent"], [class*="messageContainer"], [class*="conversationContainer"]': { 'overflow-y': 'auto !important', 'width': '100% !important', 'max-width': '100% !important', 'box-sizing': 'border-box !important' },
+        '[class*="chatMessages"], [class*="chatBody"], [class*="conversationThread"], [class*="messageList"], [class*="chatContent"], [class*="messageContainer"], [class*="conversationContainer"]': { 'overflow-y': 'auto !important', 'width': '100% !important', 'max-width': '100% !important', 'box-sizing': 'border-box !important', 'word-break': 'break-word !important', 'overflow-wrap': 'break-word !important', 'white-space': 'normal !important' },
       },
     },
   },
@@ -374,6 +374,7 @@ function SpotterPage({ tsHost, onDisconnect, onAuthLost }) {
             ref={embedRef}
             frameParams={{ width: '100%', height: '100%' }}
             worksheetId="auto_mode"
+            updatedSpotterChatPrompt={true}
             spotterSidebarConfig={{
               enablePastConversationsSidebar: true,
               spotterSidebarTitle: 'My Conversations',
