@@ -4,9 +4,11 @@ import { SpotterEmbed, useEmbedRef } from '@thoughtspot/visual-embed-sdk/react';
 import tsLogo from './logo.png';
 
 const FONT_FAMILY = 'Lexend, "Lexend Fallback", system-ui, -apple-system, sans-serif';
+const LEXEND_CSS_URL = 'https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&display=swap';
 
 const DARK_CUSTOMIZATIONS = {
   style: {
+    customCSSUrl: LEXEND_CSS_URL,
     customCSS: {
       variables: {
         '--ts-var-root-background': '#0a1628',
@@ -75,6 +77,7 @@ const DARK_CUSTOMIZATIONS = {
 
 const LIGHT_CUSTOMIZATIONS = {
   style: {
+    customCSSUrl: LEXEND_CSS_URL,
     customCSS: {
       variables: {
         '--ts-var-root-font-family': FONT_FAMILY,
