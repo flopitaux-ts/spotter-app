@@ -1,6 +1,6 @@
 {
   "name": "spotter-app",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Standalone Mac app embedding ThoughtSpot Spotter",
   "main": "src/main/main.js",
   "scripts": {
