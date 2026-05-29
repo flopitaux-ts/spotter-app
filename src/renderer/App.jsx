@@ -3,17 +3,12 @@ import { init, AuthType, AuthStatus, logout } from '@thoughtspot/visual-embed-sd
 import { SpotterEmbed, useEmbedRef } from '@thoughtspot/visual-embed-sdk/react';
 import tsLogo from './logo.png';
 
-const FONT_FAMILY = 'Lexend, "Lexend Fallback", system-ui, -apple-system, sans-serif';
-const LEXEND_CSS_URL = 'https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&display=swap';
-
 const DARK_CUSTOMIZATIONS = {
   style: {
-    customCSSUrl: LEXEND_CSS_URL,
     customCSS: {
       variables: {
         '--ts-var-root-background': '#0a1628',
         '--ts-var-root-color': '#e2e8f0',
-        '--ts-var-root-font-family': FONT_FAMILY,
         '--ts-var-nav-background': '#0d1b30',
         '--ts-var-nav-color': '#e2e8f0',
         '--ts-var-spotter-input-background': '#0d1b30',
@@ -77,10 +72,8 @@ const DARK_CUSTOMIZATIONS = {
 
 const LIGHT_CUSTOMIZATIONS = {
   style: {
-    customCSSUrl: LEXEND_CSS_URL,
     customCSS: {
       variables: {
-        '--ts-var-root-font-family': FONT_FAMILY,
         '--ts-var-spotter-chat-width': '100%',
       },
       rules_UNSTABLE: {

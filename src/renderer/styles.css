@@ -9,7 +9,7 @@ html, body, #root {
   height: 100%;
   overflow: hidden;
   background: #0a1628;
-  font-family: Lexend, "Lexend Fallback", system-ui, -apple-system, sans-serif;
+  font-family: Inter, system-ui, -apple-system, sans-serif;
   color: #e2e8f0;
 }
 
