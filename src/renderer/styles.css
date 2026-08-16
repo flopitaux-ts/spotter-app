@@ -1,3 +1,35 @@
+/* Design tokens. Light only for now — the dark theme was removed pending a
+ * visual pass against a live instance. */
+:root {
+  --bg: #ffffff;
+  --bg-elevated: #f8fafc;
+  --border: #e2e8f0;
+  --text: #0f172a;
+  --text-strong: #0f172a;
+  --text-muted: rgba(15, 23, 42, 0.6);
+  --text-subtle: rgba(15, 23, 42, 0.4);
+  --text-faint: rgba(15, 23, 42, 0.3);
+  --control-border: rgba(15, 23, 42, 0.15);
+  --control-border-hover: rgba(15, 23, 42, 0.3);
+  --control-hover-bg: rgba(15, 23, 42, 0.06);
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-muted: #93b4f5;
+  --danger: #dc2626;
+  --spinner-track: rgba(15, 23, 42, 0.08);
+  --shadow: rgba(15, 23, 42, 0.18);
+
+  /* The titlebar is a deliberately dark strip above the light app body, so it
+     carries its own tokens rather than reusing the page ones. */
+  --titlebar-bg: #0d1b30;
+  --titlebar-border: #1a2d4a;
+  --titlebar-text: rgba(226, 232, 240, 0.65);
+  --titlebar-text-strong: #e2e8f0;
+  --titlebar-control-border: rgba(255, 255, 255, 0.2);
+  --titlebar-control-border-hover: rgba(255, 255, 255, 0.4);
+  --titlebar-control-hover-bg: rgba(255, 255, 255, 0.1);
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -8,9 +40,9 @@ html, body, #root {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #0a1628;
+  background: var(--bg);
   font-family: Inter, system-ui, -apple-system, sans-serif;
-  color: #e2e8f0;
+  color: var(--text);
 }
 
 .app-container {
@@ -27,8 +59,8 @@ html, body, #root {
   height: 38px;
   min-height: 38px;
   width: 100%;
-  background: #0d1b30;
-  border-bottom: 1px solid #1a2d4a;
+  background: var(--titlebar-bg);
+  border-bottom: 1px solid var(--titlebar-border);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -39,7 +71,7 @@ html, body, #root {
 .titlebar-title {
   font-size: 12px;
   font-weight: 500;
-  color: rgba(226, 232, 240, 0.6);
+  color: var(--titlebar-text);
   letter-spacing: 0.3px;
   white-space: nowrap;
   overflow: hidden;
@@ -59,10 +91,10 @@ html, body, #root {
 .titlebar-btn {
   -webkit-app-region: no-drag;
   padding: 4px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid var(--titlebar-control-border);
   border-radius: 6px;
   background: transparent;
-  color: #e2e8f0;
+  color: var(--titlebar-text-strong);
   font-family: inherit;
   font-size: 11px;
   font-weight: 500;
@@ -71,15 +103,8 @@ html, body, #root {
 }
 
 .titlebar-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.4);
-}
-
-.titlebar-btn--icon {
-  padding: 4px 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  background: var(--titlebar-control-hover-bg);
+  border-color: var(--titlebar-control-border-hover);
 }
 
 /* Embed container */
@@ -88,6 +113,14 @@ html, body, #root {
   width: 100%;
   min-height: 0;
   position: relative;
+}
+
+/* Mounted but not yet revealed: the iframe loads while auth resolves. Uses
+   visibility rather than display:none so the embed still gets real dimensions. */
+.embed-container--warming {
+  visibility: hidden;
+  position: absolute;
+  inset: 38px 0 0 0; /* below the titlebar */
 }
 
 .embed-container > div {
@@ -108,13 +141,13 @@ html, body, #root {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: #0a1628;
+  background: var(--bg);
 }
 
 .spinner {
   width: 40px;
   height: 40px;
-  border: 3px solid rgba(255, 255, 255, 0.08);
+  border: 3px solid var(--spinner-track);
   border-top-color: #3b82f6;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
@@ -126,7 +159,7 @@ html, body, #root {
 
 .loading-text {
   margin-top: 16px;
-  color: rgba(226, 232, 240, 0.5);
+  color: var(--text-subtle);
   font-size: 14px;
   letter-spacing: 0.5px;
 }
@@ -137,7 +170,7 @@ html, body, #root {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #0a1628;
+  background: var(--bg);
   padding: 24px;
 }
 
@@ -155,13 +188,13 @@ html, body, #root {
 .setup-title {
   font-size: 24px;
   font-weight: 600;
-  color: #ffffff;
+  color: var(--text-strong);
   margin-bottom: 8px;
 }
 
 .setup-subtitle {
   font-size: 14px;
-  color: rgba(226, 232, 240, 0.55);
+  color: var(--text-muted);
   margin-bottom: 32px;
   line-height: 1.5;
 }
@@ -175,10 +208,10 @@ html, body, #root {
 .setup-input {
   width: 100%;
   padding: 14px 18px;
-  background: #0d1b30;
-  border: 1px solid #1a2d4a;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
   border-radius: 10px;
-  color: #ffffff;
+  color: var(--text);
   font-family: inherit;
   font-size: 14px;
   outline: none;
@@ -190,19 +223,19 @@ html, body, #root {
 }
 
 .setup-input::placeholder {
-  color: rgba(226, 232, 240, 0.35);
+  color: var(--text-faint);
 }
 
 .setup-error {
   font-size: 12px;
-  color: #f87171;
+  color: var(--danger);
   text-align: left;
 }
 
 .setup-button {
   width: 100%;
   padding: 14px;
-  background: #2563eb;
+  background: var(--accent);
   border: none;
   border-radius: 10px;
   color: #ffffff;
@@ -214,11 +247,11 @@ html, body, #root {
 }
 
 .setup-button:hover {
-  background: #1d4ed8;
+  background: var(--accent-hover);
 }
 
 .setup-button:disabled {
-  background: #1a3a7a;
+  background: var(--accent-muted);
   cursor: not-allowed;
   opacity: 0.7;
 }
@@ -226,14 +259,14 @@ html, body, #root {
 .setup-hint {
   margin-top: 20px;
   font-size: 12px;
-  color: rgba(226, 232, 240, 0.3);
+  color: var(--text-faint);
 }
 
 .setup-back-btn {
   margin-top: 16px;
   background: none;
   border: none;
-  color: rgba(226, 232, 240, 0.5);
+  color: var(--text-subtle);
   font-size: 13px;
   cursor: pointer;
   padding: 4px 0;
@@ -242,7 +275,7 @@ html, body, #root {
 }
 
 .setup-back-btn:hover {
-  color: rgba(226, 232, 240, 0.8);
+  color: var(--text);
 }
 
 /* Update notification banner */
@@ -256,19 +289,19 @@ html, body, #root {
   align-items: center;
   gap: 10px;
   padding: 10px 14px;
-  background: #1a2d4a;
-  border: 1px solid #3b82f6;
+  background: var(--bg-elevated);
+  border: 1px solid var(--accent);
   border-radius: 10px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 16px var(--shadow);
   font-size: 13px;
-  color: #e2e8f0;
+  color: var(--text);
   max-width: 340px;
 }
 
 .update-banner-btn {
   -webkit-app-region: no-drag;
   padding: 5px 12px;
-  background: #2563eb;
+  background: var(--accent);
   border: none;
   border-radius: 6px;
   color: #ffffff;
@@ -281,14 +314,14 @@ html, body, #root {
 }
 
 .update-banner-btn:hover {
-  background: #1d4ed8;
+  background: var(--accent-hover);
 }
 
 .update-banner-dismiss {
   -webkit-app-region: no-drag;
   background: none;
   border: none;
-  color: rgba(226, 232, 240, 0.5);
+  color: var(--text-subtle);
   font-size: 14px;
   cursor: pointer;
   padding: 0 2px;
@@ -297,5 +330,5 @@ html, body, #root {
 }
 
 .update-banner-dismiss:hover {
-  color: #e2e8f0;
+  color: var(--text);
 }

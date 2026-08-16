@@ -1,5 +1,13 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+// Wrap main-process pushes so the renderer never sees the raw IpcRendererEvent,
+// and hand back an unsubscribe function for effect cleanup.
+function subscribe(channel, callback) {
+  const listener = (_event, payload) => callback(payload);
+  ipcRenderer.on(channel, listener);
+  return () => ipcRenderer.removeListener(channel, listener);
+}
+
 contextBridge.exposeInMainWorld('electronAPI', {
   platform: process.platform,
   logout: () => ipcRenderer.invoke('logout'),
@@ -8,7 +16,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   clearHostUrl: () => ipcRenderer.invoke('clear-host-url'),
   openAuthWindow: () => ipcRenderer.invoke('open-auth-window'),
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+  installUpdate: () => ipcRenderer.invoke('install-update'),
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
+  notifyResponseComplete: () => ipcRenderer.invoke('notify-response-complete'),
   getLoggedIn: () => ipcRenderer.invoke('get-logged-in'),
   setLoggedIn: (v) => ipcRenderer.invoke('set-logged-in', v),
+  onMenuAction: (callback) => subscribe('menu-action', callback),
+  onUpdateAvailable: (callback) => subscribe('update-available', callback),
 });

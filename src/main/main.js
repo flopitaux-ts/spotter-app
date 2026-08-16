@@ -1,67 +1,110 @@
-const { app, BrowserWindow, session, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, Notification, session, ipcMain, shell, screen } = require('electron');
 const path = require('path');
-const fs = require('fs');
-const https = require('https');
+const config = require('./config');
+const updater = require('./updater');
+const { buildMenu } = require('./menu');
 
-const configPath = path.join(app.getPath('userData'), 'spotter-config.json');
+const INDEX_HTML = path.join(__dirname, '../../build/index.html');
+const RELEASES_URL_PREFIX = 'https://github.com/thoughtspot/spotter-desktop';
 
-function readConfig() {
-  try {
-    return JSON.parse(fs.readFileSync(configPath, 'utf8'));
-  } catch {
-    return {};
-  }
-}
-
-function writeConfig(data) {
-  fs.writeFileSync(configPath, JSON.stringify(data, null, 2));
-}
-
-function isValidHttpsUrl(str) {
-  try {
-    const u = new URL(str);
-    return u.protocol === 'https:';
-  } catch {
-    return false;
-  }
-}
+// Matches the renderer's chrome color so the window does not flash on launch.
+const BACKGROUND = '#ffffff';
+const DEFAULT_BOUNDS = { width: 1440, height: 900 };
 
 let mainWindow = null;
 let currentTsHost = null;
 
-function createWindow() {
-  currentTsHost = readConfig().hostUrl || null;
+// ---------- URL helpers ----------
 
-  mainWindow = new BrowserWindow({
-    width: 1440,
-    height: 900,
-    minWidth: 800,
-    minHeight: 600,
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 16, y: 16 },
-    backgroundColor: '#ffffff',
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
+function protocolOf(url) {
+  try { return new URL(url).protocol; } catch { return ''; }
+}
+
+// Compare origins, never prefixes: "https://acme.thoughtspot.cloud" is a string
+// prefix of "https://acme.thoughtspot.cloud.example.com", so startsWith would
+// treat an unrelated host as trusted.
+function isSameOrigin(url, origin) {
+  if (!origin) return false;
+  try { return new URL(url).origin === origin; } catch { return false; }
+}
+
+function isValidHttpsUrl(str) {
+  try { return new URL(str).protocol === 'https:'; } catch { return false; }
+}
+
+// ---------- Window bounds ----------
+
+function savedBounds() {
+  const { bounds } = config.read();
+  if (!bounds || !Number.isFinite(bounds.width) || !Number.isFinite(bounds.height)) return null;
+  if (!Number.isFinite(bounds.x) || !Number.isFinite(bounds.y)) {
+    return { width: bounds.width, height: bounds.height };
+  }
+  // A window restored onto a display that is no longer connected is invisible and
+  // unrecoverable without editing the config, so fall back to centering.
+  const onScreen = screen.getAllDisplays().some(({ workArea: a }) => (
+    bounds.x < a.x + a.width && bounds.x + bounds.width > a.x &&
+    bounds.y < a.y + a.height && bounds.y + bounds.height > a.y
+  ));
+  return onScreen ? bounds : { width: bounds.width, height: bounds.height };
+}
+
+let boundsTimer = null;
+function rememberBounds() {
+  if (!mainWindow || mainWindow.isDestroyed() || mainWindow.isMinimized()) return;
+  clearTimeout(boundsTimer);
+  boundsTimer = setTimeout(() => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      config.update({ bounds: mainWindow.getNormalBounds() });
+    }
+  }, 400);
+}
+
+// ---------- Session hardening ----------
+
+// Embedded content must never be able to spawn an unmanaged BrowserWindow —
+// will-navigate only covers top-level navigation, not window.open.
+function denyWindowOpen(contents) {
+  contents.setWindowOpenHandler(({ url }) => {
+    const protocol = protocolOf(url);
+    if (protocol === 'https:' || protocol === 'http:') shell.openExternal(url);
+    return { action: 'deny' };
+  });
+}
+
+function configureSession() {
+  const defaultSession = session.defaultSession;
+
+  // Deny every privileged web permission except the one Spotter's file upload
+  // may need: picking a file through the File System Access API asks for
+  // 'fileSystem'. Granted only to the configured ThoughtSpot origin, so an
+  // identity provider or any other page in this session still gets nothing.
+  const allowed = (permission, url) => (
+    permission === 'fileSystem' && isSameOrigin(url, currentTsHost)
+  );
+
+  defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    const requester = details?.requestingUrl || webContents?.getURL() || '';
+    callback(allowed(permission, requester));
   });
 
+  defaultSession.setPermissionCheckHandler((_webContents, permission, requestingOrigin) => (
+    allowed(permission, requestingOrigin || '')
+  ));
+
   // Cancel source map requests to suppress console noise
-  session.defaultSession.webRequest.onBeforeRequest((details, callback) => {
+  defaultSession.webRequest.onBeforeRequest((details, callback) => {
     if (details.url.endsWith('.js.map') || details.url.endsWith('.css.map')) {
       return callback({ cancel: true });
     }
     callback({});
   });
 
-  // Strip framing and CSP restrictions so the embed iframe works.
-  // Only applied to responses from the configured ThoughtSpot host to avoid
-  // weakening security headers on third-party requests (e.g. OIDC providers).
-  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-    if (!currentTsHost || !details.url.startsWith(currentTsHost)) {
-      return callback({});
-    }
+  // Strip framing and CSP restrictions so the embed iframe works. Scoped to the
+  // configured ThoughtSpot origin so third-party requests (e.g. OIDC providers)
+  // keep their security headers.
+  defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    if (!isSameOrigin(details.url, currentTsHost)) return callback({});
     const headers = { ...details.responseHeaders };
     delete headers['x-frame-options'];
     delete headers['X-Frame-Options'];
@@ -71,8 +114,31 @@ function createWindow() {
     delete headers['Content-Security-Policy-Report-Only'];
     callback({ responseHeaders: headers });
   });
+}
 
-  mainWindow.loadFile(path.join(__dirname, '../../build/index.html'));
+// ---------- Main window ----------
+
+function createWindow() {
+  currentTsHost = config.read().hostUrl || null;
+
+  mainWindow = new BrowserWindow({
+    ...DEFAULT_BOUNDS,
+    ...savedBounds(),
+    minWidth: 800,
+    minHeight: 600,
+    titleBarStyle: 'hiddenInset',
+    trafficLightPosition: { x: 16, y: 16 },
+    backgroundColor: BACKGROUND,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+
+  mainWindow.loadFile(INDEX_HTML);
+  denyWindowOpen(mainWindow.webContents);
 
   // Keep the main window on the local file:// page at all times.
   // isMainFrame check is critical: will-navigate/will-redirect fire for ALL frames including
@@ -85,6 +151,9 @@ function createWindow() {
   mainWindow.webContents.on('will-navigate', blockExternalNavigation);
   mainWindow.webContents.on('will-redirect', blockExternalNavigation);
 
+  mainWindow.on('resize', rememberBounds);
+  mainWindow.on('move', rememberBounds);
+
   if (process.argv.includes('--devtools')) {
     mainWindow.webContents.openDevTools();
   }
@@ -92,26 +161,28 @@ function createWindow() {
   mainWindow.on('closed', () => { mainWindow = null; });
 }
 
-ipcMain.handle('get-host-url', () => {
-  return readConfig().hostUrl || null;
-});
+function sendToRenderer(channel, payload) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send(channel, payload);
+  }
+}
+
+// ---------- IPC ----------
+
+ipcMain.handle('get-host-url', () => config.read().hostUrl || null);
 
 ipcMain.handle('set-host-url', (_event, url) => {
   if (typeof url !== 'string' || !isValidHttpsUrl(url)) {
     throw new Error('Invalid URL: must be a valid HTTPS URL');
   }
-  const config = readConfig();
-  config.hostUrl = new URL(url).origin;
-  writeConfig(config);
-  currentTsHost = config.hostUrl;
+  const origin = new URL(url).origin;
+  config.update({ hostUrl: origin });
+  currentTsHost = origin;
   return true;
 });
 
 ipcMain.handle('clear-host-url', () => {
-  const config = readConfig();
-  delete config.hostUrl;
-  delete config.authToken;
-  writeConfig(config);
+  config.update({ hostUrl: undefined, authToken: undefined, loggedIn: undefined });
   currentTsHost = null;
   return true;
 });
@@ -120,24 +191,40 @@ ipcMain.handle('logout', async () => {
   await session.defaultSession.clearStorageData();
   await session.defaultSession.clearCache();
   await session.defaultSession.clearAuthCache();
-  const config = readConfig();
-  delete config.authToken;
-  delete config.loggedIn;
-  writeConfig(config);
-  if (mainWindow) {
-    mainWindow.loadFile(path.join(__dirname, '../../build/index.html'));
-  }
+  config.update({ authToken: undefined, loggedIn: undefined });
+  if (mainWindow) mainWindow.loadFile(INDEX_HTML);
 });
 
-ipcMain.handle('get-logged-in', () => {
-  return readConfig().loggedIn || false;
-});
+ipcMain.handle('get-logged-in', () => config.read().loggedIn || false);
 
 ipcMain.handle('set-logged-in', (_event, value) => {
-  const config = readConfig();
-  config.loggedIn = !!value;
-  writeConfig(config);
+  config.update({ loggedIn: !!value });
   return true;
+});
+
+// Spotter answers can take a while, so users switch away while one is running.
+// This is the thing a desktop app can do that a browser tab cannot: tell them it
+// landed. Silent when the window already has focus — they can see it themselves.
+ipcMain.handle('notify-response-complete', () => {
+  if (!mainWindow || mainWindow.isDestroyed() || mainWindow.isFocused()) return;
+
+  if (Notification.isSupported()) {
+    const notification = new Notification({
+      title: 'Spotter',
+      body: 'Your answer is ready.',
+      silent: false,
+    });
+    notification.on('click', () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    });
+    notification.show();
+  }
+
+  if (process.platform === 'darwin') app.dock?.bounce('informational');
 });
 
 // Open a dedicated BrowserWindow for OIDC login.
@@ -147,16 +234,17 @@ ipcMain.handle('set-logged-in', (_event, value) => {
 // load from CDNjs (the referenced axios version does not exist on that CDN).
 // tsHost is read from the persisted config rather than trusted from the renderer.
 ipcMain.handle('open-auth-window', async () => {
-  const tsHost = readConfig().hostUrl;
+  const tsHost = config.read().hostUrl;
   if (!tsHost) return { success: false };
   return new Promise((resolve) => {
     let resolved = false;
+    let timer = null;
     const finish = (result) => {
-      if (!resolved) {
-        resolved = true;
-        if (authWin && !authWin.isDestroyed()) authWin.close();
-        resolve(result);
-      }
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timer);
+      if (authWin && !authWin.isDestroyed()) authWin.close();
+      resolve(result);
     };
 
     const authWin = new BrowserWindow({
@@ -166,11 +254,20 @@ ipcMain.handle('open-auth-window', async () => {
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
+        sandbox: true,
         // defaultSession used by default — cookies shared with the main window
       },
     });
 
     authWin.loadURL(`${tsHost}/callosum/v1/oidc/login`);
+
+    // Some identity providers open the login step with window.open. Keep it inside
+    // this window so the resulting cookies land in the shared session, instead of
+    // letting it spawn an unrestricted BrowserWindow.
+    authWin.webContents.setWindowOpenHandler(({ url }) => {
+      if (protocolOf(url) === 'https:') authWin.loadURL(url);
+      return { action: 'deny' };
+    });
 
     // Inject the stub on every dom-ready (fires on each page in the auth flow).
     // This must run before the XHR success callback that calls uploadMixpanelEvent.
@@ -183,7 +280,7 @@ ipcMain.handle('open-auth-window', async () => {
     // Detect auth completion: ThoughtSpot redirects back to its main app after OIDC
     authWin.webContents.on('did-navigate', (_e, url) => {
       if (
-        url.startsWith(tsHost) &&
+        isSameOrigin(url, tsHost) &&
         !url.includes('/authorize') &&
         !url.includes('/callosum/v1/oidc') &&
         !url.includes('/callosum/v1/saml')
@@ -193,43 +290,35 @@ ipcMain.handle('open-auth-window', async () => {
     });
 
     authWin.on('closed', () => finish({ success: false }));
-    setTimeout(() => finish({ success: false }), 10 * 60 * 1000);
+    timer = setTimeout(() => finish({ success: false }), 10 * 60 * 1000);
   });
 });
 
-ipcMain.handle('check-for-updates', () => {
-  const currentVersion = app.getVersion();
-  return new Promise((resolve) => {
-    const req = https.get(
-      {
-        hostname: 'api.github.com',
-        path: '/repos/thoughtspot/spotter-desktop/releases/latest',
-        headers: { 'User-Agent': 'spotter-desktop' },
-      },
-      (res) => {
-        let data = '';
-        res.on('data', (chunk) => { data += chunk; });
-        res.on('end', () => {
-          try {
-            const release = JSON.parse(data);
-            resolve({ latestVersion: release.tag_name, currentVersion, url: release.html_url });
-          } catch {
-            resolve(null);
-          }
-        });
-      }
-    );
-    req.on('error', () => resolve(null));
-  });
-});
+const onUpdateReady = (info) => sendToRenderer('update-available', info);
+
+ipcMain.handle('check-for-updates', () => updater.checkForUpdates(onUpdateReady));
+ipcMain.handle('install-update', () => updater.quitAndInstall());
 
 ipcMain.handle('open-external', (_event, url) => {
-  if (typeof url === 'string' && url.startsWith('https://github.com/thoughtspot/spotter-desktop')) {
+  if (typeof url === 'string' && url.startsWith(RELEASES_URL_PREFIX)) {
     shell.openExternal(url);
   }
 });
 
-app.whenReady().then(createWindow);
+// ---------- Lifecycle ----------
+
+app.whenReady().then(() => {
+  configureSession();
+  buildMenu({
+    onSwitchInstance: () => sendToRenderer('menu-action', 'switch-instance'),
+    onSignOut: () => sendToRenderer('menu-action', 'sign-out'),
+    onCheckForUpdates: async () => {
+      const info = await updater.checkForUpdates(onUpdateReady);
+      sendToRenderer('update-available', info || { mode: 'current' });
+    },
+  });
+  createWindow();
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();

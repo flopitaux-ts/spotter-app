@@ -3,6 +3,21 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!--
+    The renderer only ever loads its own bundle from file://. Scripts are locked to
+    'self'; inline styles are allowed because style-loader injects <style> tags and
+    React uses style attributes. The embed iframe and its XHRs need https:.
+  -->
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self';
+    style-src 'self' 'unsafe-inline';
+    img-src 'self' data: blob: https:;
+    font-src 'self' data:;
+    connect-src 'self' https: wss:;
+    frame-src https:;
+    worker-src 'self' blob:;
+  " />
   <title>Spotter</title>
 </head>
 <body>

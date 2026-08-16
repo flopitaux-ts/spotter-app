@@ -1,7 +1,10 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 
-module.exports = {
+module.exports = (_env, argv) => ({
+  // Webpack's development default is 'eval', which the renderer's script-src 'self'
+  // CSP blocks. Use a real source map in dev and none in the shipped bundle.
+  devtool: argv.mode === 'development' ? 'source-map' : false,
   entry: './src/renderer/index.jsx',
   output: {
     path: path.resolve(__dirname, 'build'),
@@ -39,4 +42,4 @@ module.exports = {
       template: './src/renderer/index.html',
     }),
   ],
-};
+});
