@@ -32,6 +32,14 @@ jobs:
           # Developer ID certificate exported as base64-encoded .p12
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          # Notarization. electron-builder reads these directly — see
+          # app-builder-lib getNotarizeOptions(). App-specific passwords get
+          # revoked and expire; an App Store Connect API key does not, and is
+          # the same three vars locally and here.
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Baked into the renderer bundle by webpack. Without it the shipped
+          # build reports no usage at all, and does so silently — analytics.js
+          # disables itself rather than failing loudly.
+          MIXPANEL_TOKEN: ${{ secrets.MIXPANEL_TOKEN }}

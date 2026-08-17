@@ -1,7 +1,25 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { init, AuthType, AuthStatus, logout } from '@thoughtspot/visual-embed-sdk';
+import { init, AuthType, AuthStatus, logout, getSessionInfo } from '@thoughtspot/visual-embed-sdk';
 import { SpotterEmbed, useEmbedRef } from '@thoughtspot/visual-embed-sdk/react';
+import { useAnswerNotification } from './useAnswerNotification';
+import { useSpotterAnalytics } from './useSpotterAnalytics';
+import { initAnalytics, identify } from './analytics';
 import tsLogo from './logo.png';
+
+// The embed takes one handler per event, but notifications and analytics both
+// listen to the same four. Fan each event out instead of letting one win.
+function mergeHandlers(...maps) {
+  const merged = {};
+  for (const map of maps) {
+    for (const [event, handler] of Object.entries(map)) {
+      const previous = merged[event];
+      merged[event] = previous
+        ? (...args) => { previous(...args); handler(...args); }
+        : handler;
+    }
+  }
+  return merged;
+}
 
 // Genuine workarounds for the embed overflowing its container, not styling —
 // there is no CSS variable equivalent, so they stay as raw rules.
@@ -15,9 +33,13 @@ const EMBED_CUSTOMIZATIONS = {
   style: {
     customCSS: {
       variables: {
-        '--ts-var-spotter-chat-width': '100%',
+        // A desktop window is far wider than a browser column, and 100% left the
+        // prompt bar stretched across ~1075px. Cap it at a readable measure but
+        // keep the percentage fallback so it still collapses at the 800px
+        // minimum window width.
+        '--ts-var-spotter-chat-width': 'min(860px, 100%)',
       },
-      rules_UNSTABLE: { ...LAYOUT_RULES },
+      rules_UNSTABLE: LAYOUT_RULES,
     },
   },
 };
@@ -62,12 +84,16 @@ function UpdateBanner({ info, onDismiss }) {
 
 // ---------- SDK init ----------
 
-function initializeSDK(tsHost, customizations, onSuccess, onAuthFailed) {
+function initializeSDK(tsHost, customizations, thirdPartyVars, onSuccess, onAuthFailed) {
   const authEE = init({
     thoughtSpotHost: tsHost,
     authType: AuthType.None,
     customizations,
     suppressNoCookieAccessAlert: true,
+    // Read by a third-party script through window.tsEmbed, but only once the
+    // cluster has External Tool Script Integration enabled and the hosting
+    // domain allowlisted. Inert until then — see README.
+    customVariablesForThirdPartyTools: thirdPartyVars,
   });
 
   if (authEE) {
@@ -101,8 +127,6 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-// ---------- Icons ----------
-
 // ---------- Shared logo ----------
 
 function SpotterLogo() {
@@ -113,8 +137,8 @@ function SpotterLogo() {
 
 // ---------- Setup page ----------
 
-function SetupPage({ onConnect, savedUrl }) {
-  const [url, setUrl] = useState(savedUrl || '');
+function SetupPage({ onConnect }) {
+  const [url, setUrl] = useState('');
   const [error, setError] = useState('');
 
   const handleSubmit = async (e) => {
@@ -229,7 +253,7 @@ function LoginPage({ tsHost, onAuthDone, onBack }) {
 
 // ---------- Spotter page ----------
 
-function SpotterPage({ tsHost, onSignOut, onAuthLost }) {
+function SpotterPage({ tsHost, appVersion, onSignOut, onAuthLost }) {
   const embedRef = useEmbedRef();
   const [sdkInitialized, setSdkInitialized] = useState(false);
   const [sdkReady, setSdkReady] = useState(false);
@@ -238,33 +262,42 @@ function SpotterPage({ tsHost, onSignOut, onAuthLost }) {
   useEffect(() => {
     if (sdkKeyRef.current === tsHost) return; // already initialized for this host
     sdkKeyRef.current = tsHost;
-    initializeSDK(tsHost, EMBED_CUSTOMIZATIONS, () => setSdkReady(true), onAuthLost);
+    const thirdPartyVars = {
+      surface: 'spotter-desktop',
+      appVersion,
+      platform: window.electronAPI?.platform,
+    };
+    initializeSDK(tsHost, EMBED_CUSTOMIZATIONS, thirdPartyVars, () => setSdkReady(true), onAuthLost);
     // init() returns synchronously; auth resolves later. Flipping this now lets the
     // embed mount and start loading its iframe while we are still waiting on auth,
     // instead of the two waits running back to back.
     setSdkInitialized(true);
-  }, [tsHost, onAuthLost]);
+  }, [tsHost, appVersion, onAuthLost]);
 
-  // Notify when an answer lands while the user is away. No single event covers
-  // this on every cluster version, so we arm on the query and fire on whichever
-  // completion signal arrives first:
-  //   SpotterResponseComplete - the precise one, needs 26.9.0.cl
-  //   SpotterData             - text answers, 10.10.0.cl
-  //   Data                    - visualization answers, available everywhere
-  // Arming on the query is what keeps Data from notifying on conversation
-  // restores and other data traffic the user did not ask for.
-  const queryPendingRef = useRef(false);
+  // Identity comes from the ThoughtSpot session rather than anything we hold, so
+  // it can only be resolved once auth has landed.
+  useEffect(() => {
+    if (!sdkReady) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const session = await getSessionInfo();
+        if (cancelled) return;
+        identify({
+          userGUID: session?.userGUID,
+          host: getHostLabel(tsHost),
+          appVersion,
+          platform: window.electronAPI?.platform,
+        });
+      } catch {
+        // Analytics identity is best-effort; a failure here must not surface.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [sdkReady, tsHost, appVersion]);
 
-  const handleQueryTriggered = useCallback(() => {
-    queryPendingRef.current = true;
-  }, []);
-
-  const handleResponseComplete = useCallback(() => {
-    if (!queryPendingRef.current) return;
-    queryPendingRef.current = false; // first signal wins; the rest are duplicates
-    window.electronAPI?.notifyResponseComplete();
-  }, []);
-
+  const answerNotification = useAnswerNotification();
+  const analytics = useSpotterAnalytics();
   const hostLabel = getHostLabel(tsHost);
 
   return (
@@ -298,18 +331,23 @@ function SpotterPage({ tsHost, onSignOut, onAuthLost }) {
               updatedSpotterChatPrompt={true}
               // Lets users interrupt a long generation (26.5+)
               enableStopAnswerGenerationEmbed={true}
+              // The refreshed Spotter UI and its ambient glow (26.9+). Both are
+              // rendered inside the iframe, so older clusters simply ignore them.
+              updatedSpotterExperience={true}
+              showSpotterRadiance={true}
               spotterChatConfig={{
                 enableStarterPrompts: true, // 26.8+
                 spotterFileUploadEnabled: true, // 26.6+
               }}
-              // Inert until the cluster reaches 26.9 — the SDK forwards it, but the
-              // share UI is rendered by ThoughtSpot inside the iframe. champagne is
-              // on 26.8, so this lights up on upgrade with no code change.
-              spotterShareConversationConfig={{ enableShareConversation: true }}
-              onSpotterQueryTriggered={handleQueryTriggered}
-              onSpotterResponseComplete={handleResponseComplete}
-              onSpotterData={handleResponseComplete}
-              onData={handleResponseComplete}
+              // Live as of champagne 26.9. Only the labels that read oddly outside
+              // a browser tab are overridden; the rest keep ThoughtSpot's
+              // translated defaults so other locales are not pinned to English.
+              spotterShareConversationConfig={{
+                enableShareConversation: true, // 26.9+
+                spotterShareModalTitle: 'Share this conversation',
+                spotterShareEmptySubtitle: 'Not shared with anyone yet',
+              }}
+              {...mergeHandlers(answerNotification, analytics)}
               spotterSidebarConfig={{
                 enablePastConversationsSidebar: true,
                 spotterSidebarTitle: 'My Conversations',
@@ -330,16 +368,20 @@ export default function App() {
   const [authDone, setAuthDone] = useState(false);
   const [checking, setChecking] = useState(true);
   const [updateInfo, setUpdateInfo] = useState(null);
+  const [appVersion, setAppVersion] = useState(null);
 
   useEffect(() => {
+    initAnalytics();
     (async () => {
       const api = window.electronAPI;
-      const [saved, loggedIn] = await Promise.all([
+      const [saved, loggedIn, version] = await Promise.all([
         api?.getHostUrl?.() ?? null,
         api?.getLoggedIn?.() ?? false, // skip LoginPage if a previous session authenticated
+        api?.getAppVersion?.() ?? null,
       ]);
       if (saved) setTsHost(saved);
       if (loggedIn) setAuthDone(true);
+      setAppVersion(version);
       setChecking(false);
     })();
   }, []);
@@ -407,7 +449,7 @@ export default function App() {
     return (
       <>
         {updateBanner}
-        <SetupPage onConnect={handleConnect} savedUrl="" />
+        <SetupPage onConnect={handleConnect} />
       </>
     );
   }
@@ -424,7 +466,12 @@ export default function App() {
   return (
     <>
       {updateBanner}
-      <SpotterPage tsHost={tsHost} onSignOut={handleSignOut} onAuthLost={handleAuthLost} />
+      <SpotterPage
+        tsHost={tsHost}
+        appVersion={appVersion}
+        onSignOut={handleSignOut}
+        onAuthLost={handleAuthLost}
+      />
     </>
   );
 }

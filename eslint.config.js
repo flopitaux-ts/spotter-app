@@ -29,7 +29,9 @@ module.exports = [
     languageOptions: {
       ecmaVersion: 2023,
       sourceType: 'module',
-      globals: globals.browser,
+      // `process` is not a browser global, but webpack's DefinePlugin substitutes
+      // process.env.MIXPANEL_TOKEN with a literal before the bundle is emitted.
+      globals: { ...globals.browser, process: 'readonly' },
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
     settings: { react: { version: 'detect' } },

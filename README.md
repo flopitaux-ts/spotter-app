@@ -81,6 +81,49 @@ npm run pack
 
 Without these variables, the app is built and signed but not notarized (Gatekeeper will show a warning on first launch).
 
+### Usage Analytics
+
+Spotter usage is reported to Mixpanel when the app is built with a project token:
+
+```bash
+MIXPANEL_TOKEN=your_project_token npm run pack
+```
+
+Webpack bakes the token into the renderer bundle. Without it every analytics call
+is a no-op, so local builds and forks never write into the project.
+
+Two events are sent, both derived from embed events the app already listens to:
+
+| Event | Properties |
+| --- | --- |
+| `Question Asked` | — |
+| `Answer Completed` | `duration_ms`, `signal` |
+
+`signal` records which SDK event reported completion, which doubles as a reading
+of the cluster's version: `SpotterResponseComplete` means 26.9+,
+`SpotterData` means 10.10+, and `Data` means older than both.
+
+Autocapture is enabled, so Mixpanel also records clicks, input changes, scrolls
+and submits on its own. Pageviews are disabled: the renderer is a single
+`file://` page, and Mixpanel's default `full-url` mode would report the local
+filesystem path rather than anything useful. Session replay is off.
+
+Note that autocapture only sees the app's own chrome — the titlebar, setup and
+sign-in screens. Spotter itself renders in a cross-origin iframe that host-page
+JavaScript cannot observe; capturing interactions in there needs the External
+Tool Script Integration described below.
+
+Users are identified by ThoughtSpot user GUID, with the instance hostname, app
+version and platform registered as super properties. Nothing from the contents of
+a conversation is collected — no question text, no answer data.
+
+> **External Tool Script Integration is not wired up.** The app passes
+> `customVariablesForThirdPartyTools` through `init()`, which is the SDK half of
+> that feature, but a hosted script cannot load until ThoughtSpot Support enables
+> the integration for the cluster and an administrator allowlists the script
+> domain under **Develop > Customizations > Security Settings**. Until then the
+> variables are inert and the tracking above runs entirely host-side.
+
 ### Publishing a Release
 
 Auto-update reads `latest-mac.yml`, which electron-builder only writes when it
@@ -92,7 +135,9 @@ npm version minor && git push --follow-tags
 
 The `Release` workflow builds, signs, notarizes and publishes to GitHub Releases.
 It needs these repository secrets: `CSC_LINK` (base64-encoded Developer ID `.p12`),
-`CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`.
+`CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`,
+and `MIXPANEL_TOKEN`. The Mixpanel one is not optional in practice — without it
+the released build reports no usage, and fails silently rather than loudly.
 
 > Releases uploaded by hand will not contain `latest-mac.yml`. The app still
 > notices them and falls back to showing a "Download" banner pointing at the

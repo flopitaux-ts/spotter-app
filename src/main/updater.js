@@ -115,4 +115,4 @@ function quitAndInstall() {
   if (autoUpdater && downloadedVersion) autoUpdater.quitAndInstall();
 }
 
-module.exports = { REPO, RELEASES_URL, isNewerVersion, checkForUpdates, quitAndInstall };
+module.exports = { REPO, RELEASES_URL, checkForUpdates, quitAndInstall };

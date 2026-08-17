@@ -5,6 +5,9 @@ dist/
 *.zip
 .DS_Store
 
+# Local Claude Code config — settings.local.json and worktrees are per-machine
+.claude/
+
 # Environment variables
 .env
 

@@ -1,5 +1,10 @@
 const path = require('path');
+const webpack = require('webpack');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
+
+// Load .env so MIXPANEL_TOKEN does not have to be exported by hand on every
+// build. A real environment variable still wins, which is what CI relies on.
+require('dotenv').config();
 
 module.exports = (_env, argv) => ({
   // Webpack's development default is 'eval', which the renderer's script-src 'self'
@@ -40,6 +45,12 @@ module.exports = (_env, argv) => ({
   plugins: [
     new HtmlWebpackPlugin({
       template: './src/renderer/index.html',
+    }),
+    // The Mixpanel project token is baked in at build time rather than shipped in
+    // the repo. Left undefined, analytics.js disables itself, so local builds and
+    // forks never write into the project.
+    new webpack.DefinePlugin({
+      'process.env.MIXPANEL_TOKEN': JSON.stringify(process.env.MIXPANEL_TOKEN || ''),
     }),
   ],
 });

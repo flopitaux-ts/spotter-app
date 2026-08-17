@@ -5,7 +5,9 @@ const updater = require('./updater');
 const { buildMenu } = require('./menu');
 
 const INDEX_HTML = path.join(__dirname, '../../build/index.html');
-const RELEASES_URL_PREFIX = 'https://github.com/thoughtspot/spotter-desktop';
+// Derived from the updater's repo constant so the allowlist cannot drift away
+// from the release URLs the banner actually hands us.
+const RELEASES_URL_PREFIX = `https://github.com/${updater.REPO}`;
 
 // Matches the renderer's chrome color so the window does not flash on launch.
 const BACKGROUND = '#ffffff';
@@ -195,6 +197,8 @@ ipcMain.handle('logout', async () => {
   if (mainWindow) mainWindow.loadFile(INDEX_HTML);
 });
 
+ipcMain.handle('get-app-version', () => app.getVersion());
+
 ipcMain.handle('get-logged-in', () => config.read().loggedIn || false);
 
 ipcMain.handle('set-logged-in', (_event, value) => {
@@ -202,29 +206,22 @@ ipcMain.handle('set-logged-in', (_event, value) => {
   return true;
 });
 
+function focusMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
 // Spotter answers can take a while, so users switch away while one is running.
-// This is the thing a desktop app can do that a browser tab cannot: tell them it
-// landed. Silent when the window already has focus — they can see it themselves.
-ipcMain.handle('notify-response-complete', () => {
+// Silent when the window already has focus — they can see it themselves.
+// app.dock only exists on macOS, so the optional call is the platform check.
+ipcMain.on('notify-response-complete', () => {
   if (!mainWindow || mainWindow.isDestroyed() || mainWindow.isFocused()) return;
-
-  if (Notification.isSupported()) {
-    const notification = new Notification({
-      title: 'Spotter',
-      body: 'Your answer is ready.',
-      silent: false,
-    });
-    notification.on('click', () => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        if (mainWindow.isMinimized()) mainWindow.restore();
-        mainWindow.show();
-        mainWindow.focus();
-      }
-    });
-    notification.show();
-  }
-
-  if (process.platform === 'darwin') app.dock?.bounce('informational');
+  new Notification({ title: 'Spotter', body: 'Your answer is ready.' })
+    .on('click', focusMainWindow)
+    .show();
+  app.dock?.bounce('informational');
 });
 
 // Open a dedicated BrowserWindow for OIDC login.

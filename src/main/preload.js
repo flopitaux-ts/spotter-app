@@ -18,7 +18,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   installUpdate: () => ipcRenderer.invoke('install-update'),
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
-  notifyResponseComplete: () => ipcRenderer.invoke('notify-response-complete'),
+  // Fire and forget — nothing to await, no reply.
+  notifyResponseComplete: () => ipcRenderer.send('notify-response-complete'),
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   getLoggedIn: () => ipcRenderer.invoke('get-logged-in'),
   setLoggedIn: (v) => ipcRenderer.invoke('set-logged-in', v),
   onMenuAction: (callback) => subscribe('menu-action', callback),
