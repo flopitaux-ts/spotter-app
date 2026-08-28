@@ -3,7 +3,10 @@ import { init, Action, AuthType, AuthStatus, logout, getSessionInfo } from '@tho
 import { SpotterEmbed, useEmbedRef } from '@thoughtspot/visual-embed-sdk/react';
 import { useAnswerNotification } from './useAnswerNotification';
 import { useSpotterAnalytics } from './useSpotterAnalytics';
-import { initAnalytics, identify } from './analytics';
+import { useConversationActivity } from './useConversationActivity';
+import { useOrgs } from './useOrgs';
+import { OrgSwitcher } from './OrgSwitcher';
+import { initAnalytics, identify, track, setOrg } from './analytics';
 import tsLogo from './logo.png';
 
 // The embed takes one handler per event, but notifications and analytics both
@@ -298,13 +301,44 @@ function SpotterPage({ tsHost, appVersion, onSignOut, onAuthLost }) {
 
   const answerNotification = useAnswerNotification();
   const analytics = useSpotterAnalytics();
+  const { handlers: conversationHandlers, hasAsked, reset: resetConversation } = useConversationActivity();
+  const { orgs, currentOrgId, switching, error: orgError, epoch, switchTo } = useOrgs({
+    tsHost,
+    enabled: sdkReady,
+  });
   const hostLabel = getHostLabel(tsHost);
+
+  // Keep the analytics super property in step with the Org actually in view,
+  // on first load as well as after a switch.
+  const currentOrgName = orgs.find((org) => org.id === currentOrgId)?.name;
+  useEffect(() => { setOrg(currentOrgName); }, [currentOrgName]);
+
+  const handleSelectOrg = useCallback(async (orgId) => {
+    const target = orgs.find((org) => org.id === orgId);
+    // Only interrupt when there is a conversation to lose; switching from an
+    // empty chat costs the user nothing.
+    if (hasAsked()) {
+      const confirmed = await window.electronAPI?.confirmOrgSwitch?.(target?.name ?? 'another Org');
+      if (!confirmed) return;
+    }
+    if (await switchTo(orgId)) {
+      resetConversation();
+      track('Org Switched');
+    }
+  }, [orgs, hasAsked, resetConversation, switchTo]);
 
   return (
     <div className="app-container">
       <div className="titlebar">
         <span className="titlebar-title">{hostLabel} - Spotter</span>
         <div className="titlebar-actions">
+          <OrgSwitcher
+            orgs={orgs}
+            currentOrgId={currentOrgId}
+            switching={switching}
+            error={orgError}
+            onSelect={handleSelectOrg}
+          />
           <button className="titlebar-btn" onClick={onSignOut}>
             Logout
           </button>
@@ -325,6 +359,9 @@ function SpotterPage({ tsHost, appVersion, onSignOut, onAuthLost }) {
         >
           <ErrorBoundary>
             <SpotterEmbed
+              // Remount on Org switch: a new key destroys the iframe and builds a
+              // fresh one, which picks up the session's newly-switched Org.
+              key={epoch}
               ref={embedRef}
               frameParams={{ width: '100%', height: '100%' }}
               worksheetId="auto_mode"
@@ -347,7 +384,7 @@ function SpotterPage({ tsHost, appVersion, onSignOut, onAuthLost }) {
                 spotterShareModalTitle: 'Share this conversation',
                 spotterShareEmptySubtitle: 'Not shared with anyone yet',
               }}
-              {...mergeHandlers(answerNotification, analytics)}
+              {...mergeHandlers(answerNotification, analytics, conversationHandlers)}
               spotterSidebarConfig={{
                 enablePastConversationsSidebar: true,
                 spotterSidebarTitle: 'My Conversations',

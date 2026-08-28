@@ -62,6 +62,19 @@ export function identify({ userGUID, host, appVersion, platform }) {
   }
 }
 
+// The active Org rides along as a super property so every later event is
+// attributable to one, without each call site having to pass it. Registered
+// separately from identify() because the Org list resolves after the session
+// does, and can change mid-session when the user switches.
+export function setOrg(orgName) {
+  if (!ready || !orgName) return;
+  try {
+    mixpanel.register({ org_name: orgName });
+  } catch (err) {
+    console.error('Mixpanel setOrg failed:', err?.message || err);
+  }
+}
+
 export function track(event, props) {
   if (!ready) return;
   try {
