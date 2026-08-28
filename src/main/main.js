@@ -1,6 +1,8 @@
-const { app, BrowserWindow, Notification, session, ipcMain, shell, screen } = require('electron');
+const { app, BrowserWindow, Notification, dialog, session, ipcMain, shell, screen } = require('electron');
 const path = require('path');
 const config = require('./config');
+const orgs = require('./orgs');
+const { protocolOf, isSameOrigin, isValidHttpsUrl } = require('./urls');
 const updater = require('./updater');
 const { buildMenu } = require('./menu');
 
@@ -15,24 +17,6 @@ const DEFAULT_BOUNDS = { width: 1440, height: 900 };
 
 let mainWindow = null;
 let currentTsHost = null;
-
-// ---------- URL helpers ----------
-
-function protocolOf(url) {
-  try { return new URL(url).protocol; } catch { return ''; }
-}
-
-// Compare origins, never prefixes: "https://acme.thoughtspot.cloud" is a string
-// prefix of "https://acme.thoughtspot.cloud.example.com", so startsWith would
-// treat an unrelated host as trusted.
-function isSameOrigin(url, origin) {
-  if (!origin) return false;
-  try { return new URL(url).origin === origin; } catch { return false; }
-}
-
-function isValidHttpsUrl(str) {
-  try { return new URL(str).protocol === 'https:'; } catch { return false; }
-}
 
 // ---------- Window bounds ----------
 
@@ -195,6 +179,29 @@ ipcMain.handle('logout', async () => {
   await session.defaultSession.clearAuthCache();
   config.update({ authToken: undefined, loggedIn: undefined });
   if (mainWindow) mainWindow.loadFile(INDEX_HTML);
+});
+
+// ---------- Orgs ----------
+
+ipcMain.handle('get-orgs', () => orgs.fetchOrgs());
+
+ipcMain.handle('switch-org', (_event, orgId) => orgs.switchOrg(orgId));
+
+// Switching Org reloads the embed, which throws away whatever is on screen. Ask
+// first when there is something to lose. A native sheet rather than an in-page
+// modal: the renderer's chat area belongs to the iframe, and this reads as an
+// app-level decision.
+ipcMain.handle('confirm-org-switch', async (_event, orgName) => {
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
+  const { response } = await dialog.showMessageBox(mainWindow, {
+    type: 'question',
+    buttons: ['Switch', 'Cancel'],
+    defaultId: 0,
+    cancelId: 1,
+    message: `Switch to ${orgName}?`,
+    detail: 'Your current conversation will be closed.',
+  });
+  return response === 0;
 });
 
 ipcMain.handle('get-app-version', () => app.getVersion());

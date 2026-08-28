@@ -21,6 +21,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Fire and forget — nothing to await, no reply.
   notifyResponseComplete: () => ipcRenderer.send('notify-response-complete'),
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+  getOrgs: () => ipcRenderer.invoke('get-orgs'),
+  switchOrg: (id) => ipcRenderer.invoke('switch-org', id),
+  confirmOrgSwitch: (name) => ipcRenderer.invoke('confirm-org-switch', name),
   getLoggedIn: () => ipcRenderer.invoke('get-logged-in'),
   setLoggedIn: (v) => ipcRenderer.invoke('set-logged-in', v),
   onMenuAction: (callback) => subscribe('menu-action', callback),
