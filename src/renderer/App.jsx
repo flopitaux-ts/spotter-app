@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { init, AuthType, AuthStatus, logout, getSessionInfo } from '@thoughtspot/visual-embed-sdk';
+import { init, Action, AuthType, AuthStatus, logout, getSessionInfo } from '@thoughtspot/visual-embed-sdk';
 import { SpotterEmbed, useEmbedRef } from '@thoughtspot/visual-embed-sdk/react';
 import { useAnswerNotification } from './useAnswerNotification';
 import { useSpotterAnalytics } from './useSpotterAnalytics';
@@ -353,6 +353,10 @@ function SpotterPage({ tsHost, appVersion, onSignOut, onAuthLost }) {
                 spotterSidebarTitle: 'My Conversations',
                 spotterSidebarDefaultExpanded: false,
               }}
+              // The sidebar footer's docs/"Best Practices" link points at the
+              // ThoughtSpot help site, which has nowhere useful to go from a
+              // desktop window. Removed rather than repointed (26.3+).
+              hiddenActions={[Action.SpotterDocs]}
             />
           </ErrorBoundary>
         </div>
